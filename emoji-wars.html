@@ -1,0 +1,1707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Viewport adjusted for mobile safe areas and preventing zoom -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="theme-color" content="#0f172a">
+    <title>Emoji Wars: Mobile Edition</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* SAFE AREA PADDING FOR NOTCHED PHONES */
+        body { padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+        
+        /* PREVENT SCROLLING/ZOOMING ON GAMEPLAY ELEMENTS */
+        .touch-locked { touch-action: none; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+        @keyframes shake { 0%, 100% { transform: translateX(0); } 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+        .shake { animation: shake 0.3s ease-in-out; }
+        @keyframes hit-bounce { 0% { transform: scale(1); } 50% { transform: scale(0.9) rotate(5deg); } 100% { transform: scale(1) rotate(0deg); } }
+        .hit-anim { animation: hit-bounce 0.1s ease-out; }
+        @keyframes pulse-count { 0% { transform: scale(0.5); opacity: 0; } 50% { transform: scale(1.2); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        .count-anim { animation: pulse-count 0.5s ease-out forwards; }
+        @keyframes float-up { 0% { transform: translateY(0) scale(1); opacity: 1; } 100% { transform: translateY(-50px) scale(1.5); opacity: 0; } }
+        .damage-text { position: absolute; animation: float-up 0.8s ease-out forwards; font-weight: 900; pointer-events: none; z-index: 40; }
+        @keyframes confetti-fall { 0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; } 100% { transform: translateY(100vh) rotate(720deg); opacity: 0; } }
+        .confetti { position: absolute; width: 10px; height: 10px; top: -10px; animation: confetti-fall linear forwards; }
+        @keyframes death-spin { 0% { transform: scale(1) rotate(0deg); opacity: 1; } 100% { transform: scale(0) rotate(720deg); opacity: 0; } }
+        .monster-death { animation: death-spin 1s ease-in forwards; }
+        .crack-path { fill: none; stroke: rgba(255, 255, 255, 0.9); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 0 3px rgba(0,0,0,0.9)); opacity: 0; transition: opacity 0.05s ease-in; }
+        .crack-visible { opacity: 1; }
+        .powerup-active { box-shadow: 0 0 40px rgba(251, 191, 36, 0.6); border-color: #fbbf24 !important; }
+
+        /* BOLD CHARGE BAR ANIMATIONS */
+        @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+        @keyframes pulse-charge-max { 
+            0% { transform: scaleY(1); box-shadow: 0 0 10px #fbbf24; filter: brightness(1); } 
+            50% { transform: scaleY(1.3); box-shadow: 0 0 25px #fbbf24, 0 0 10px #fff; filter: brightness(1.2); } 
+            100% { transform: scaleY(1); box-shadow: 0 0 10px #fbbf24; filter: brightness(1); } 
+        }
+        .charge-low { background: #3b82f6; box-shadow: 0 0 8px #3b82f6; transition: width 0.1s; }
+        .charge-med { background: #34d399; box-shadow: 0 0 15px #34d399; transition: width 0.1s; }
+        .charge-max { 
+            background: linear-gradient(90deg, #d97706, #fbbf24, #ffffff, #fbbf24, #d97706); 
+            background-size: 200% auto;
+            animation: shimmer 1.5s linear infinite, pulse-charge-max 0.15s ease-in-out infinite alternate;
+            border: 1px solid white;
+        }
+
+        /* COMPASS MODE STYLES */
+        .compass-ring { width: 100%; height: 100%; border-radius: 50%; border: 4px solid rgba(255,255,255,0.1); position: absolute; inset: 0; }
+        .compass-target { position: absolute; top: 0; left: 50%; width: 0; height: 50%; transform-origin: bottom center; }
+        .compass-player { position: absolute; top: 0; left: 50%; width: 0; height: 50%; transform-origin: bottom center; pointer-events: none; }
+        .compass-player-dot { position: absolute; top: 0; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; transition: width 0.3s, height 0.3s; }
+        .tracking-active .compass-player-dot { box-shadow: 0 0 15px #34d399; background-color: #34d399; }
+        .tracking-inactive .compass-player-dot { background-color: #22d3ee; opacity: 0.8; }
+
+        /* TIMER RING */
+        .timer-svg { position: absolute; inset: -8px; width: calc(100% + 16px); height: calc(100% + 16px); transform: rotate(-90deg); pointer-events: none; z-index: 10; }
+        .timer-circle { fill: none; stroke: #22d3ee; stroke-width: 4; stroke-linecap: round; transition: stroke-dashoffset 0.1s linear; }
+        
+        /* WORD STYLES */
+        .word-char { display: inline-block; transition: color 0.1s; text-shadow: 0 2px 0 rgba(0,0,0,0.5); }
+        .word-char.typed { color: #34d399; text-shadow: 0 0 10px rgba(52, 211, 153, 0.5); transform: scale(1.1); }
+        .word-char.pending { color: rgba(255,255,255,0.3); }
+        .word-char.current { color: #ffffff; text-decoration: underline; text-decoration-color: #fbbf24; text-decoration-thickness: 3px; }
+
+        /* LICENSE CARD STYLES */
+        #license-card { position: relative; overflow: hidden; }
+        .card-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-15deg); font-size: 140px; opacity: 0.15; pointer-events: none; z-index: 0; }
+        .card-content { position: relative; z-index: 10; }
+        
+        /* Utility */
+        .no-select { user-select: none; -webkit-user-select: none; }
+        
+        /* MOBILE D-PAD */
+        .dpad-btn { 
+            background: rgba(255, 255, 255, 0.1); 
+            border: 2px solid rgba(255, 255, 255, 0.2); 
+            backdrop-filter: blur(5px);
+            border-radius: 12px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 24px; color: white;
+            transition: all 0.05s;
+            touch-action: manipulation;
+        }
+        .dpad-btn:active { background: rgba(255, 255, 255, 0.3); transform: scale(0.95); border-color: white; }
+    </style>
+</head>
+<body class="bg-slate-900 text-white flex items-center justify-center min-h-screen font-sans selection:bg-red-500 selection:text-white overflow-hidden touch-locked">
+
+    <div id="confetti-container" class="absolute inset-0 pointer-events-none overflow-hidden z-50"></div>
+    <div id="crack-overlay" class="absolute inset-0 pointer-events-none z-40 flex items-center justify-center overflow-hidden">
+        <svg id="crack-svg" class="w-full h-full opacity-80" viewBox="0 0 400 400" preserveAspectRatio="none">
+            <path class="crack-path crack-edge" id="crack-edge-1" d="M0,50 L80,100 L50,150" />
+            <path class="crack-path crack-edge" id="crack-edge-2" d="M100,0 L120,80 L200,50" />
+            <path class="crack-path crack-edge" id="crack-edge-3" d="M300,0 L280,100 L350,120" />
+            <path class="crack-path crack-edge" id="crack-edge-4" d="M400,50 L320,120 L350,180" />
+            <path class="crack-path crack-edge" id="crack-edge-5" d="M400,300 L300,320 L280,250" />
+            <path class="crack-path crack-edge" id="crack-edge-6" d="M300,400 L250,320 L320,280" />
+            <path class="crack-path crack-edge" id="crack-edge-7" d="M100,400 L120,300 L50,280" />
+            <path class="crack-path crack-edge" id="crack-edge-8" d="M0,300 L80,250 L120,280" />
+            <path class="crack-path" id="crack-center" d="M200,200 m-80,-80 l160,160 m-160,0 l160,-160 m-80,-80 v160 m-80,-80 h160" stroke-width="5" />
+        </svg>
+    </div>
+
+    <div id="game-container" class="relative w-full max-w-md h-[95vh] max-h-[850px] p-4 bg-slate-800 rounded-xl shadow-2xl text-center border-4 border-slate-600 transition-colors duration-200 overflow-hidden z-10 no-select flex flex-col">
+        <div class="mb-2 flex justify-between items-center border-b border-slate-700 pb-2">
+            <div class="text-left">
+                <h1 class="text-xl font-black bg-gradient-to-r from-red-500 to-orange-500 bg-clip-text text-transparent uppercase tracking-tighter">Emoji Wars</h1>
+                <p class="text-slate-400 text-[9px] font-mono tracking-widest">MOBILE OPS</p>
+            </div>
+            <div class="bg-slate-900 px-3 py-1 rounded-lg border border-slate-700 flex items-center gap-2">
+                <span class="text-lg">🧠</span>
+                <span id="mrains-display" class="font-mono text-emerald-400 font-bold text-sm">0</span>
+            </div>
+        </div>
+
+        <!-- AD OVERLAY (MOCK) -->
+        <div id="ad-overlay" class="absolute inset-0 bg-black z-[100] hidden flex-col items-center justify-center space-y-4">
+            <div class="text-4xl animate-bounce">📺</div>
+            <h2 class="text-white font-bold text-xl uppercase">Watching Ad...</h2>
+            <div class="w-64 h-2 bg-slate-700 rounded-full overflow-hidden">
+                <div id="ad-progress" class="h-full bg-yellow-400 w-0 transition-all duration-[3000ms] ease-linear"></div>
+            </div>
+            <p class="text-xs text-slate-500">Support the developer!</p>
+        </div>
+
+        <!-- START SCREEN -->
+        <div id="start-screen" class="space-y-3 flex-1 flex flex-col pt-2 overflow-y-auto">
+            <div class="bg-slate-900/50 p-2 rounded-lg border border-slate-700 flex gap-2">
+                <div id="preview-emoji" class="text-4xl">⚔️</div>
+                <div class="flex-1 text-left">
+                    <p class="text-xs text-slate-500 uppercase">Current Target</p>
+                    <div class="flex justify-between items-end">
+                        <span id="preview-name" class="font-bold text-white text-sm">The Ogre</span>
+                        <button onclick="game.rerollMonster()" class="text-[10px] text-cyan-400 hover:text-cyan-300 uppercase px-2 py-1 bg-slate-800 rounded border border-slate-600">Reroll</button>
+                    </div>
+                    <div class="flex justify-between items-center mt-1">
+                        <p id="preview-hp" class="text-xs text-red-400 font-mono">20 HP</p>
+                        <p id="preview-rarity" class="text-[10px] uppercase font-bold text-slate-500">Normal</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOADOUT DISPLAY -->
+            <div class="flex gap-2">
+                <div class="flex-1 bg-slate-900/50 p-2 rounded border border-slate-700 flex items-center gap-2">
+                    <div class="text-xl">⚔️</div>
+                    <div class="text-left leading-tight">
+                        <p class="text-[9px] text-slate-500 uppercase">Weapon</p>
+                        <p id="loadout-weapon" class="text-[10px] font-bold text-white">Fist</p>
+                    </div>
+                </div>
+                <div class="flex-1 bg-slate-900/50 p-2 rounded border border-slate-700 flex items-center gap-2">
+                    <div class="text-xl">🛡️</div>
+                    <div class="text-left leading-tight">
+                        <p class="text-[9px] text-slate-500 uppercase">Outfit</p>
+                        <p id="loadout-outfit-score" class="text-[10px] font-bold text-white">Basic</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-2">
+                <button onclick="game.triggerCountdown()" class="col-span-2 py-5 bg-red-600 hover:bg-red-500 text-white font-black uppercase tracking-widest rounded-xl transition-all shadow-lg border-b-4 border-red-800 active:border-b-0 active:translate-y-1 text-lg">Battle</button>
+                <button onclick="game.openStore()" class="py-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold uppercase rounded-lg border-b-2 border-slate-800">🛡️ Armory</button>
+                <button onclick="game.openOptions()" class="py-3 bg-slate-700 hover:bg-slate-600 text-xs font-bold uppercase rounded-lg border-b-2 border-slate-800">⚙️ Options</button>
+                <button onclick="game.openProfile()" class="col-span-2 py-3 bg-gradient-to-r from-slate-700 to-slate-800 hover:from-slate-600 text-sm font-bold uppercase rounded-lg border border-slate-600 flex items-center justify-center gap-2">🆔 Hunter License</button>
+            </div>
+
+            <!-- PLAYER PROFILE -->
+            <div id="player-profile" class="bg-gradient-to-br from-slate-800 to-slate-900 rounded-xl border border-slate-600 p-3 mt-2 shadow-inner">
+                <div class="flex justify-between items-end mb-2">
+                    <span class="text-[9px] text-slate-400 uppercase tracking-widest font-bold">Progress</span>
+                    <span id="rank-name" class="text-xs font-black text-yellow-400 uppercase italic">Rookie</span>
+                </div>
+                <div class="w-full bg-slate-900 h-2 rounded-full overflow-hidden mb-2">
+                    <div id="rank-progress" class="bg-yellow-500 h-full w-0 transition-all duration-500"></div>
+                </div>
+                <div class="flex justify-between text-xs font-mono text-slate-300">
+                    <div>
+                        <p class="text-slate-500 text-[9px] uppercase">Kills</p>
+                        <p id="total-kills" class="text-sm font-bold text-white">0</p>
+                    </div>
+                    <div class="text-right">
+                        <p class="text-slate-500 text-[9px] uppercase">Lifetime Brains</p>
+                        <p id="total-brains" class="text-sm font-bold text-emerald-400">0</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- PROFILE SCREEN (CUSTOMIZATION) -->
+        <div id="profile-screen" class="hidden pt-1 space-y-3 flex-1 flex flex-col overflow-hidden">
+            <div id="license-card" class="p-4 rounded-xl border-4 shadow-2xl relative transition-all flex-shrink-0" style="background: linear-gradient(135deg, #1e293b, #0f172a); border-color: #475569;">
+                <div class="card-watermark" id="card-bg-insignia"></div>
+                <div class="absolute top-3 right-3 p-2 z-10 flex flex-col items-center">
+                    <span class="text-[8px] font-bold uppercase text-white/50 mb-1">Insignia</span>
+                    <span id="card-insignia-icon" class="text-3xl filter drop-shadow-md">✨</span>
+                </div>
+                <div class="absolute top-4 right-16 z-10 flex flex-col items-end gap-1">
+                    <div class="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded border border-white/10 shadow-sm backdrop-blur-md">
+                        <span class="text-[10px] font-bold text-red-400">HP</span>
+                        <span id="card-stat-hp" class="text-xs font-mono font-bold text-white">5</span>
+                    </div>
+                    <div class="flex items-center gap-1 bg-black/40 px-2 py-0.5 rounded border border-white/10 shadow-sm backdrop-blur-md">
+                        <span class="text-[10px] font-bold text-yellow-400">PWR</span>
+                        <span id="card-stat-pwr" class="text-xs font-mono font-bold text-white">1.0</span>
+                        <span id="card-stat-weapon" class="text-sm leading-none ml-1">👊</span>
+                    </div>
+                </div>
+                <div class="flex items-start gap-4 mb-3 relative z-10 card-content">
+                    <div class="grid grid-cols-2 gap-1 w-20 h-20 bg-black/20 p-1 rounded-lg border border-white/10">
+                        <div id="grid-helmet" class="bg-slate-700/50 rounded flex items-center justify-center text-xl shadow-inner">🧢</div>
+                        <div id="grid-face" class="bg-slate-700/50 rounded flex items-center justify-center text-xl shadow-inner">😎</div>
+                        <div id="grid-body" class="bg-slate-700/50 rounded flex items-center justify-center text-xl shadow-inner">👕</div>
+                        <div id="grid-shield" class="bg-slate-700/50 rounded flex items-center justify-center text-xl shadow-inner">🛡️</div>
+                    </div>
+                    <div class="text-left flex-1 pt-1">
+                        <p class="text-[8px] uppercase tracking-widest opacity-70">Operative</p>
+                        <p class="text-xl font-black uppercase tracking-wide leading-none" id="card-name">Warrior</p>
+                        <p class="text-[10px] font-bold text-yellow-400 uppercase mt-1" id="card-rank">Rookie</p>
+                        <p class="text-[8px] italic text-cyan-300 mt-1 max-w-[140px] leading-tight" id="card-outfit-roast">"Dressed in the dark?"</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-left relative z-10 mb-2 card-content">
+                    <div class="bg-black/20 p-1.5 rounded">
+                        <p class="text-[8px] uppercase opacity-60">Kills</p>
+                        <p class="text-xs font-mono font-bold" id="card-kills">0</p>
+                    </div>
+                    <div class="bg-black/20 p-1.5 rounded">
+                        <p class="text-[8px] uppercase opacity-60">Brains</p>
+                        <p class="text-xs font-mono font-bold text-emerald-400" id="card-brains">0</p>
+                    </div>
+                </div>
+                <div class="space-y-0.5 relative z-10 card-content">
+                    <p class="text-[8px] uppercase opacity-50 border-b border-white/10 pb-0.5 mb-0.5">Champions (Best Kill)</p>
+                    <div class="grid grid-cols-3 items-center gap-1">
+                        <span class="text-[8px] text-left">Twiddle (Arrow)</span>
+                        <span class="text-[8px] text-center truncate font-bold text-yellow-300" id="kill-twiddle">--</span>
+                        <span class="text-[10px] font-mono text-cyan-300 text-right" id="stat-twiddle">--</span>
+                    </div>
+                    <div class="grid grid-cols-3 items-center gap-1">
+                        <span class="text-[8px] text-left">Alpha (Words)</span>
+                        <span class="text-[8px] text-center truncate font-bold text-yellow-300" id="kill-alpha">--</span>
+                        <span class="text-[10px] font-mono text-rose-300 text-right" id="stat-alpha">--</span>
+                    </div>
+                    <div class="grid grid-cols-3 items-center gap-1">
+                        <span class="text-[8px] text-left">Sync (Track)</span>
+                        <span class="text-[8px] text-center truncate font-bold text-yellow-300" id="kill-sync">--</span>
+                        <span class="text-[10px] font-mono text-emerald-300 text-right" id="stat-sync">--</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex-1 flex flex-col min-h-0">
+                <div class="flex gap-1 mb-2 border-b border-white/10 pb-1 overflow-x-auto">
+                    <button onclick="game.filterCardStore('borders')" id="btn-tab-borders" class="px-2 py-1 text-[10px] uppercase font-bold bg-slate-700 rounded text-slate-300 flex-shrink-0">Border</button>
+                    <button onclick="game.filterCardStore('fills')" id="btn-tab-fills" class="px-2 py-1 text-[10px] uppercase font-bold bg-slate-800 rounded text-slate-500 flex-shrink-0">Fill</button>
+                    <button onclick="game.filterCardStore('fonts')" id="btn-tab-fonts" class="px-2 py-1 text-[10px] uppercase font-bold bg-slate-800 rounded text-slate-500 flex-shrink-0">Font</button>
+                    <button onclick="game.filterCardStore('insignia')" id="btn-tab-insignia" class="px-2 py-1 text-[10px] uppercase font-bold bg-slate-800 rounded text-slate-500 flex-shrink-0">Insignia</button>
+                    <button onclick="game.filterCardStore('faces')" id="btn-tab-faces" class="px-2 py-1 text-[10px] uppercase font-bold bg-slate-800 rounded text-slate-500 flex-shrink-0">Face</button>
+                </div>
+                
+                <div id="card-store-list" class="grid grid-cols-3 gap-2 overflow-y-auto pr-1 pb-2"></div>
+            </div>
+
+            <div class="grid grid-cols-2 gap-2 mt-auto">
+                <button onclick="game.mintLicense()" class="py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold rounded-lg text-xs uppercase flex items-center justify-center gap-2"><span>💾</span> Mint PNG</button>
+                <button onclick="game.switchScreen('start')" class="py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg text-xs uppercase">Back</button>
+            </div>
+        </div>
+
+        <!-- ARMORY SCREEN -->
+        <div id="armory-screen" class="hidden pt-4 space-y-4 flex-1 flex flex-col overflow-hidden">
+            <h2 class="text-xl font-bold text-white uppercase tracking-wider flex items-center justify-center gap-2">🛡️ The Armory</h2>
+             <!-- Ad Hook -->
+            <button onclick="game.watchAd(100)" class="w-full py-2 bg-yellow-600/20 border border-yellow-500/50 text-yellow-400 font-bold rounded text-xs uppercase flex items-center justify-center gap-2 hover:bg-yellow-600/40"><span>📺</span> Watch Ad (+100 🧠)</button>
+
+            <div class="flex gap-1 border-b border-slate-700 pb-2 overflow-x-auto">
+                <button onclick="game.filterStore('weapons')" id="tab-weapons" class="px-2 text-[10px] font-bold py-2 bg-slate-700 rounded text-white flex-shrink-0">WEAPONS</button>
+                <button onclick="game.filterStore('helmets')" id="tab-helmets" class="px-2 text-[10px] font-bold py-2 bg-slate-800 rounded text-slate-400 hover:text-white flex-shrink-0">HELMETS</button>
+                <button onclick="game.filterStore('bodies')" id="tab-bodies" class="px-2 text-[10px] font-bold py-2 bg-slate-800 rounded text-slate-400 hover:text-white flex-shrink-0">BODY</button>
+                <button onclick="game.filterStore('shields')" id="tab-shields" class="px-2 text-[10px] font-bold py-2 bg-slate-800 rounded text-slate-400 hover:text-white flex-shrink-0">SHIELDS</button>
+                <button onclick="game.filterStore('powerups')" id="tab-powerups" class="px-2 text-[10px] font-bold py-2 bg-slate-800 rounded text-slate-400 hover:text-white flex-shrink-0">POWER</button>
+            </div>
+            <div id="store-list" class="flex-1 overflow-y-auto space-y-2 pr-1"></div>
+            <button onclick="game.switchScreen('start')" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg mt-auto">Back to Camp</button>
+        </div>
+
+        <!-- OPTIONS SCREEN -->
+        <div id="options-screen" class="hidden pt-4 space-y-6 flex-1 flex flex-col">
+            <h2 class="text-xl font-bold text-white uppercase tracking-wider">Battle Options</h2>
+            <div class="space-y-3 text-left">
+                <p class="text-xs text-slate-400 uppercase font-bold">Input Controls</p>
+                <div class="grid grid-cols-3 gap-2">
+                    <button id="btn-mode-arrows" onclick="game.setInputMode('arrows')" class="p-2 rounded-lg border-2 border-slate-600 bg-slate-800 hover:bg-slate-700 transition-all flex flex-col items-center gap-1"><span class="text-xl">⬆️</span><span class="text-[10px] font-bold">Arrows</span></button>
+                    <button id="btn-mode-letters" onclick="game.setInputMode('letters')" class="p-2 rounded-lg border-2 border-slate-600 bg-slate-800 hover:bg-slate-700 transition-all flex flex-col items-center gap-1"><span class="text-xl font-mono font-bold">ABC</span><span class="text-[10px] font-bold">Words</span></button>
+                    <button id="btn-mode-trackpad" onclick="game.setInputMode('trackpad')" class="p-2 rounded-lg border-2 border-slate-600 bg-slate-800 hover:bg-slate-700 transition-all flex flex-col items-center gap-1"><span class="text-xl">🖱️</span><span class="text-[10px] font-bold">Trackpad</span></button>
+                </div>
+                <p class="text-[10px] text-slate-500 italic mt-2">Mobile Tip: Arrows & Trackpad work best on touch screens.</p>
+            </div>
+            <div class="space-y-3 pt-6 border-t border-slate-700">
+                <p class="text-xs text-slate-400 uppercase font-bold">Data Management</p>
+                 <button onclick="localStorage.clear(); window.location.reload();" class="w-full py-2 bg-red-900/50 hover:bg-red-800 text-red-200 font-bold rounded-lg border border-red-800 text-xs uppercase">⚠️ Reset Save Data</button>
+            </div>
+            <button onclick="game.switchScreen('start')" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-white font-bold rounded-lg mt-auto">Back to Menu</button>
+        </div>
+
+        <!-- COUNTDOWN -->
+        <div id="countdown-screen" class="hidden py-10 flex flex-col items-center justify-center space-y-4 flex-1">
+            <div id="countdown-num" class="text-8xl font-black text-red-500">3</div>
+            <p class="text-slate-400 uppercase tracking-widest text-sm font-bold">Prepare for Battle</p>
+        </div>
+
+        <!-- PLAY SCREEN -->
+        <div id="play-screen" class="hidden relative h-full flex flex-col">
+            <div class="space-y-1 mb-2 flex-shrink-0">
+                <div class="w-full bg-slate-900 h-6 rounded-full overflow-hidden border-2 border-slate-700 relative"><div id="health-bar-fill" class="bg-red-500 h-full transition-all duration-200 ease-out" style="width: 100%"></div><div id="health-text" class="absolute inset-0 flex items-center justify-center text-xs font-bold text-white drop-shadow-md tracking-wider">MONSTER HP</div></div>
+                <div class="flex justify-between items-center text-[10px] uppercase text-slate-500 font-bold px-1"><span id="player-lives-label">Screen Integrity</span><span id="player-lives-text" class="text-cyan-400">100%</span></div>
+            </div>
+            
+            <!-- Game Area -->
+            <div class="flex-1 flex flex-col items-center justify-center relative min-h-0">
+                <div id="damage-container" class="absolute inset-0 pointer-events-none z-30"></div>
+                <!-- Monster scales based on available height -->
+                <div id="monster-display" class="text-8xl md:text-9xl mb-4 transition-all duration-300 z-10 filter relative animate-float">👹</div>
+                
+                <div id="input-container" class="relative z-20 bg-slate-700/50 p-4 rounded-full border border-slate-600 backdrop-blur-sm w-40 h-40 flex items-center justify-center shadow-xl transition-all duration-200 overflow-hidden">
+                    <svg id="timer-svg" class="timer-svg hidden" viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="46" class="timer-circle" stroke-dasharray="289" stroke-dashoffset="0"></circle>
+                    </svg>
+                    <div id="word-timer-bar" class="absolute bottom-0 left-0 h-2 bg-cyan-400 transition-all duration-100 ease-linear w-full hidden"></div>
+                    
+                    <div id="arrow-display" class="transition-transform relative z-20"></div>
+                    <div id="compass-display" class="hidden absolute inset-0">
+                        <div class="compass-ring"></div>
+                        <div id="compass-target" class="compass-target"><div class="w-4 h-4 bg-red-500 rounded-full absolute -top-2 left-1/2 transform -translate-x-1/2 shadow-[0_0_10px_#ef4444]"></div><div class="w-1 h-full bg-gradient-to-t from-transparent to-red-500/50 mx-auto"></div></div>
+                        <div id="compass-player" class="compass-player"><div id="compass-tracker-dot" class="compass-player-dot w-3 h-3"></div></div>
+                    </div>
+                    <div id="weapon-display" class="absolute -bottom-2 -right-2 bg-slate-800 p-1 rounded-full border border-slate-500 text-lg shadow-lg">👊</div>
+                    <div id="streak-bar-container" class="absolute -bottom-6 left-0 right-0 h-3 bg-slate-900 rounded-full overflow-hidden border border-slate-700 hidden shadow-md"><div id="streak-bar-fill" class="h-full bg-blue-500 w-0"></div></div>
+                </div>
+                
+                <p id="timer-display" class="mt-4 text-xs text-slate-500 animate-pulse font-mono">ACT FAST! 0.5s</p>
+                <div id="powerup-status" class="mt-1 h-6 flex items-center justify-center gap-2 opacity-0 transition-opacity"><span class="text-yellow-400 text-[10px] font-bold uppercase tracking-wide">Charge Ready</span></div>
+            </div>
+
+            <!-- Mobile Controls Area -->
+            <div id="mobile-controls" class="h-40 flex-shrink-0 flex items-center justify-center pb-4 pt-2 border-t border-slate-700/50 mt-2">
+                <!-- D-Pad for Arrows -->
+                <div id="dpad-controls" class="hidden grid-cols-3 gap-2">
+                    <div></div>
+                    <button class="dpad-btn w-16 h-16" ontouchstart="game.handleInput('arrowup'); event.preventDefault();">⬆️</button>
+                    <div></div>
+                    <button class="dpad-btn w-16 h-16" ontouchstart="game.handleInput('arrowleft'); event.preventDefault();">⬅️</button>
+                    <button class="dpad-btn w-16 h-16" ontouchstart="game.handleInput('arrowdown'); event.preventDefault();">⬇️</button>
+                    <button class="dpad-btn w-16 h-16" ontouchstart="game.handleInput('arrowright'); event.preventDefault();">➡️</button>
+                </div>
+                <!-- Trackpad Hint -->
+                <div id="trackpad-hint" class="hidden text-center text-slate-500 text-xs animate-pulse">
+                    <p>DRAG ANYWHERE TO ROTATE</p>
+                    <p class="text-[10px] opacity-70 mt-1">TAP CENTER TO USE POWERUP</p>
+                </div>
+                 <!-- Word Hint -->
+                 <div id="word-hint" class="hidden text-center text-slate-500 text-xs">
+                    <p>TYPE THE WORD</p>
+                    <p class="text-[10px] opacity-70 mt-1">(Keyboard Required)</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- RESULT SCREEN -->
+        <div id="result-screen" class="hidden space-y-6 flex-1 flex flex-col items-center justify-center">
+            <div id="result-icon" class="text-6xl mb-2 animate-bounce">💀</div>
+            <h2 id="result-title" class="text-3xl font-black text-red-500 uppercase italic">Monster Slain!</h2>
+            <div id="result-stats-grid" class="grid grid-cols-2 gap-4 w-full">
+                <div class="p-4 bg-slate-700/50 rounded-lg border border-slate-600"><p class="text-slate-400 text-xs uppercase tracking-widest mb-1">Time</p><p id="result-time" class="text-2xl font-mono text-white font-bold">0.000s</p></div>
+                <div class="p-4 bg-emerald-900/30 rounded-lg border border-emerald-500/30"><p class="text-emerald-400 text-xs uppercase tracking-widest mb-1">Reward</p><p id="result-reward" class="text-2xl font-mono text-emerald-400 font-bold">+10 🧠</p></div>
+            </div>
+
+            <!-- REVIVE BUTTON (Hidden if won) -->
+            <button id="btn-revive" onclick="game.watchReviveAd()" class="hidden w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-white font-bold rounded-xl transition-all uppercase tracking-wider shadow-lg flex items-center justify-center gap-2">
+                <span>📺</span> Watch Ad to Revive (50% HP)
+            </button>
+
+            <div id="post-game-controls" class="space-y-3 w-full">
+                 <button onclick="game.nextLevel()" class="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl transition-all uppercase tracking-wider shadow-lg">Next Battle</button>
+                <button onclick="game.returnToStart()" class="w-full py-3 bg-slate-700 hover:bg-slate-600 text-slate-300 font-bold rounded-xl transition-all uppercase text-xs">Return to Camp</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden Canvas for Minting -->
+    <canvas id="license-canvas" width="600" height="350" class="hidden"></canvas>
+
+    <script>
+        const GameConfig = {
+            healAmount: 5, basePlayerHP: 5,
+            storageKeyMrains: 'emoji_wars_mrains_v2', storageKeyInputMode: 'emoji_wars_input_mode_v2',
+            storageKeyInventory: 'emoji_wars_inventory_v3', storageKeyLoadout: 'emoji_wars_loadout_v3', 
+            storageKeyStats: 'emoji_wars_stats_v3' 
+        };
+
+        const HunterRanks = [
+            { name: "Rookie", kills: 0 },
+            { name: "Scout", kills: 5 },
+            { name: "Hunter", kills: 15 },
+            { name: "Slayer", kills: 30 },
+            { name: "Veteran", kills: 50 },
+            { name: "Elite", kills: 100 },
+            { name: "Warlord", kills: 200 },
+            { name: "Earth Beast Face", kills: 500 },
+            { name: "Solar Slayer", kills: 1000 },
+            { name: "Galaxy Freak", kills: 5000 },
+            { name: "Emoji God", kills: 10000 }
+        ];
+        
+        const Rarity = { 
+            EASY: { id: 'easy', label: 'Easy', prob: 0.50, hpMult: 1, rewardMult: 1, damage: 1, color: 'text-white', timeout: 1500, rotateSpeed: 1, wordTime: 3000 }, 
+            MEDIUM: { id: 'medium', label: 'Medium', prob: 0.25, hpMult: 2, rewardMult: 2, damage: 1, color: 'text-cyan-400', timeout: 1300, rotateSpeed: 1.5, wordTime: 2750 }, 
+            HARD: { id: 'hard', label: 'Hard', prob: 0.12, hpMult: 3, rewardMult: 4, damage: 2, color: 'text-yellow-400', timeout: 1100, rotateSpeed: 2, wordTime: 2500 }, 
+            MUY_DURO: { id: 'muy_duro', label: 'Muy Duro', prob: 0.08, hpMult: 5, rewardMult: 8, damage: 2, color: 'text-orange-500', timeout: 900, rotateSpeed: 3, wordTime: 2250 }, 
+            IMPOSSIBLE: { id: 'impossible', label: 'Impossible', prob: 0.04, hpMult: 10, rewardMult: 20, damage: 3, color: 'text-red-500', timeout: 700, rotateSpeed: 4, wordTime: 2000 }, 
+            INTRACTABLE: { id: 'intractable', label: 'INTRACTABLE', prob: 0.01, hpMult: 25, rewardMult: 100, damage: 3, color: 'text-purple-500', timeout: 500, rotateSpeed: 6, wordTime: 1750 } 
+        };
+        
+        const BaseMonsters = [ { emoji: '👹', name: 'Ogre' }, { emoji: '🧟', name: 'Zombie' }, { emoji: '🧛', name: 'Vampire' }, { emoji: '🐺', name: 'Wolf' }, { emoji: '🦍', name: 'Ape' }, { emoji: '🦖', name: 'Dino' }, { emoji: '👽', name: 'Alien' }, { emoji: '🤖', name: 'Bot' }, { emoji: '🐲', name: 'Dragon' }, { emoji: '🤡', name: 'Clown' } ];
+        
+        const WordDictionary = {
+            easy: ['HIT', 'CUT', 'JAB', 'BAM', 'POW', 'ZAP', 'KICK', 'BITE', 'SLAP', 'BONK', 'HURT'],
+            medium: ['SLASH', 'CRUSH', 'SMASH', 'SHOOT', 'BREAK', 'BURST', 'PUNCH', 'FORCE', 'BLAST', 'STING', 'WHACK'],
+            hard: ['ATTACK', 'IMPALE', 'STRIKE', 'CHARGE', 'DAMAGE', 'INJURE', 'WOUND', 'PIERCE', 'THRUST', 'BATTER'],
+            expert: ['DESTROY', 'EXECUTE', 'SHATTER', 'DEMOLISH', 'EXPLODE', 'DECIMATE', 'RUPTURE', 'PULVERIZE', 'FRACTURE'],
+            god: ['OBLITERATE', 'ANNIHILATE', 'ERADICATE', 'EVISCERATE', 'EXTERMINATE', 'DEVASTATE', 'VAPORIZE', 'DISINTEGRATE']
+        };
+
+        const Items = {
+            weapons: [
+                { id: 'fist', name: 'Fists', price: 0, power: 1.0, icon: '👊', desc: 'Pwr: 1.0', unlockRank: 0 }, 
+                { id: 'dagger', name: 'Dagger', price: 100, power: 1.1, icon: '🗡️', desc: 'Pwr: 1.1', unlockRank: 0 },
+                { id: 'stick', name: 'Sturdy Stick', price: 150, power: 1.15, icon: '🪵', desc: 'Pwr: 1.15', unlockRank: 1 },
+                { id: 'bat', name: 'Baseball Bat', price: 250, power: 1.2, icon: '🏏', desc: 'Pwr: 1.2', unlockRank: 1 },
+                { id: 'machete', name: 'Machete', price: 300, power: 1.2, icon: '🔪', desc: 'Pwr: 1.2', unlockRank: 2 }, 
+                { id: 'axe', name: 'Hand Axe', price: 400, power: 1.25, icon: '🪓', desc: 'Pwr: 1.25', unlockRank: 2 },
+                { id: 'sword', name: 'Iron Sword', price: 500, power: 1.3, icon: '⚔️', desc: 'Pwr: 1.3', unlockRank: 3 },
+                { id: 'bow', name: 'Longbow', price: 600, power: 1.35, icon: '🏹', desc: 'Pwr: 1.35', unlockRank: 3 },
+                { id: 'katana', name: 'Katana', price: 750, power: 1.3, icon: '⚔️', desc: 'Pwr: 1.3', unlockRank: 4 }, 
+                { id: 'chainsaw', name: 'Chainsaw', price: 1000, power: 1.45, icon: '🪚', desc: 'Pwr: 1.45', unlockRank: 4 },
+                { id: 'battleaxe', name: 'Battle Axe', price: 1500, power: 1.4, icon: '🪓', desc: 'Pwr: 1.4', unlockRank: 5 }, 
+                { id: 'bomb', name: 'Bomb Bag', price: 2000, power: 1.55, icon: '💣', desc: 'Pwr: 1.55', unlockRank: 5 },
+                { id: 'laser', name: 'Laser Blade', price: 3000, power: 1.5, icon: '✨', desc: 'Pwr: 1.5', unlockRank: 6 }, 
+                { id: 'rocket', name: 'Rocket Launcher', price: 4000, power: 1.65, icon: '🚀', desc: 'Pwr: 1.65', unlockRank: 6 },
+                { id: 'plasma', name: 'Plasma Gun', price: 5000, power: 1.7, icon: '🔫', desc: 'Pwr: 1.7', unlockRank: 7 },
+                { id: 'trident', name: 'Poseidon Trident', price: 6000, power: 1.75, icon: '🔱', desc: 'Pwr: 1.75', unlockRank: 7 },
+                { id: 'meteor', name: 'Meteor Strike', price: 8000, power: 1.8, icon: '☄️', desc: 'Pwr: 1.8', unlockRank: 8 },
+                { id: 'sun', name: 'Sun Beam', price: 10000, power: 1.85, icon: '☀️', desc: 'Pwr: 1.85', unlockRank: 8 },
+                { id: 'blackhole', name: 'Black Hole', price: 15000, power: 1.9, icon: '⚫', desc: 'Pwr: 1.9', unlockRank: 9 },
+                { id: 'ufo', name: 'Alien Ray', price: 20000, power: 1.95, icon: '🛸', desc: 'Pwr: 1.95', unlockRank: 9 },
+                { id: 'godhand', name: 'God Hand', price: 50000, power: 2.0, icon: '🫰', desc: 'Pwr: 2.0', unlockRank: 10 },
+                { id: 'delete', name: 'Delete Key', price: 100000, power: 2.5, icon: '❌', desc: 'Pwr: 2.5', unlockRank: 10 }
+            ],
+            powerups: [{ id: 'stopper', name: 'Arrow Stopper', price: 150, icon: '🛑', desc: 'Space / Tap to Freeze', unlockRank: 0 }],
+            helmets: [
+                { id: 'none', name: 'None', price: 0, hpBonus: 0, icon: '', desc: '+0 HP', unlockRank: 0 },
+                { id: 'cap', name: 'Cap', price: 50, hpBonus: 1, icon: '🧢', desc: '+1 HP', unlockRank: 0 },
+                { id: 'poophat', name: 'Poop Hat', price: 500, hpBonus: 1, icon: '💩', desc: '+1 HP (Stinky)', unlockRank: 0, set: 'poop' },
+                { id: 'hardhat', name: 'Hard Hat', price: 250, hpBonus: 3, icon: '👷', desc: '+3 HP', unlockRank: 1 },
+                { id: 'crown', name: 'Crown', price: 1000, hpBonus: 5, icon: '👑', desc: '+5 HP', unlockRank: 2, set: 'royal' },
+                { id: 'police', name: 'Police Cap', price: 800, hpBonus: 4, icon: '👮', desc: '+4 HP', unlockRank: 2 },
+                { id: 'ninja', name: 'Ninja Hood', price: 1200, hpBonus: 6, icon: '🥷', desc: '+6 HP', unlockRank: 3, set: 'ninja' },
+                { id: 'wizard', name: 'Wizard Hat', price: 1500, hpBonus: 8, icon: '🧙', desc: '+8 HP', unlockRank: 4, set: 'magic' },
+                { id: 'alien', name: 'Alien Head', price: 2000, hpBonus: 10, icon: '👽', desc: '+10 HP', unlockRank: 5, set: 'alien' },
+                { id: 'demon', name: 'Demon Horns', price: 2500, hpBonus: 12, icon: '😈', desc: '+12 HP', unlockRank: 6, set: 'evil' },
+                { id: 'halo', name: 'Halo', price: 3000, hpBonus: 15, icon: '😇', desc: '+15 HP', unlockRank: 7, set: 'holy' },
+                { id: 'robot', name: 'Bot Head', price: 4000, hpBonus: 18, icon: '🤖', desc: '+18 HP', unlockRank: 8, set: 'mech' },
+                { id: 'brain', name: 'Big Brain', price: 5000, hpBonus: 20, icon: '🧠', desc: '+20 HP', unlockRank: 9 },
+                { id: 'diamond', name: 'Diamond Helm', price: 10000, hpBonus: 30, icon: '💎', desc: '+30 HP', unlockRank: 10, set: 'rich' }
+            ],
+            bodies: [
+                { id: 'clothes', name: 'T-Shirt', price: 0, hpBonus: 0, icon: '👕', desc: '+0 HP', unlockRank: 0 },
+                { id: 'dress', name: 'Dress', price: 50, hpBonus: 1, icon: '👗', desc: '+1 HP', unlockRank: 0 },
+                { id: 'suit', name: 'Suit', price: 500, hpBonus: 3, icon: '🕴️', desc: '+3 HP', unlockRank: 1 },
+                { id: 'tux', name: 'Tuxedo', price: 800, hpBonus: 4, icon: '🤵', desc: '+4 HP', unlockRank: 2 },
+                { id: 'dancer', name: 'Dancer', price: 600, hpBonus: 2, icon: '💃', desc: '+2 HP', unlockRank: 1 },
+                { id: 'disco', name: 'Disco', price: 600, hpBonus: 2, icon: '🕺', desc: '+2 HP', unlockRank: 1 },
+                { id: 'genie', name: 'Genie', price: 1500, hpBonus: 10, icon: '🧞', desc: '+10 HP', unlockRank: 4, set: 'magic' },
+                { id: 'hero', name: 'Hero', price: 2000, hpBonus: 12, icon: '🦸', desc: '+12 HP', unlockRank: 5 },
+                { id: 'villain', name: 'Villain', price: 2000, hpBonus: 12, icon: '🦹', desc: '+12 HP', unlockRank: 5, set: 'evil' },
+                { id: 'fairy', name: 'Fairy', price: 1500, hpBonus: 8, icon: '🧚', desc: '+8 HP', unlockRank: 4, set: 'magic' },
+                { id: 'vamp', name: 'Vampire', price: 2500, hpBonus: 14, icon: '🧛', desc: '+14 HP', unlockRank: 6, set: 'evil' },
+                { id: 'mer', name: 'Mermaid', price: 3000, hpBonus: 15, icon: '🧜', desc: '+15 HP', unlockRank: 7 },
+                { id: 'astro', name: 'Astronaut', price: 2000, hpBonus: 12, icon: '🧑‍🚀', desc: '+12 HP', unlockRank: 5, set: 'alien' },
+                { id: 'prince', name: 'Prince', price: 1000, hpBonus: 6, icon: '🤴', desc: '+6 HP', unlockRank: 2, set: 'royal' },
+                { id: 'poopsuit', name: 'Poop Suit', price: 500, hpBonus: 1, icon: '💩', desc: '+1 HP (Smelly)', unlockRank: 0, set: 'poop' },
+                { id: 'leather', name: 'Leather Vest', price: 200, hpBonus: 2, icon: '🧥', desc: '+2 HP', unlockRank: 1 },
+                { id: 'robe', name: 'Royal Robe', price: 1000, hpBonus: 6, icon: '👘', desc: '+6 HP', unlockRank: 2, set: 'royal' },
+                { id: 'ninja', name: 'Ninja Gi', price: 1200, hpBonus: 8, icon: '🥋', desc: '+8 HP', unlockRank: 3, set: 'ninja' },
+                { id: 'magic', name: 'Wizard Robe', price: 1500, hpBonus: 10, icon: '🔮', desc: '+10 HP', unlockRank: 4, set: 'magic' },
+                { id: 'alien', name: 'Space Suit', price: 2000, hpBonus: 12, icon: '👨‍🚀', desc: '+12 HP', unlockRank: 5, set: 'alien' },
+                { id: 'zombie', name: 'Rotten Skin', price: 2500, hpBonus: 14, icon: '🧟', desc: '+14 HP', unlockRank: 6, set: 'evil' },
+                { id: 'angel', name: 'Wings', price: 3000, hpBonus: 18, icon: '👼', desc: '+18 HP', unlockRank: 7, set: 'holy' },
+                { id: 'mech', name: 'Mech Body', price: 4000, hpBonus: 22, icon: '🦾', desc: '+22 HP', unlockRank: 8, set: 'mech' },
+                { id: 'eggplant', name: 'Eggplant Suit', price: 600, hpBonus: 2, icon: '🍆', desc: '+2 HP', unlockRank: 1 },
+                { id: 'diamond', name: 'Diamond Body', price: 10000, hpBonus: 40, icon: '💎', desc: '+40 HP', unlockRank: 10, set: 'rich' }
+            ],
+            shields: [
+                { id: 'none', name: 'None', price: 0, hpBonus: 0, icon: '', desc: '+0 HP', unlockRank: 0 },
+                { id: 'wood', name: 'Pot Lid', price: 50, hpBonus: 1, icon: '🥘', desc: '+1 HP', unlockRank: 0 },
+                { id: 'poopshield', name: 'Dry Turd', price: 500, hpBonus: 1, icon: '🍘', desc: '+1 HP (Hard)', unlockRank: 0, set: 'poop' },
+                { id: 'stop', name: 'Stop Sign', price: 250, hpBonus: 3, icon: '🛑', desc: '+3 HP', unlockRank: 1 },
+                { id: 'heart', name: 'Heart Shield', price: 800, hpBonus: 5, icon: '❤️', desc: '+5 HP', unlockRank: 2 },
+                { id: 'scroll', name: 'Spellbook', price: 1500, hpBonus: 8, icon: '📜', desc: '+8 HP', unlockRank: 4, set: 'magic' },
+                { id: 'ufo', name: 'UFO Lid', price: 2000, hpBonus: 10, icon: '🛸', desc: '+10 HP', unlockRank: 5, set: 'alien' },
+                { id: 'trident', name: 'Trident', price: 2500, hpBonus: 12, icon: '🔱', desc: '+12 HP', unlockRank: 6, set: 'evil' },
+                { id: 'star', name: 'Star', price: 3000, hpBonus: 15, icon: '⭐', desc: '+15 HP', unlockRank: 7, set: 'holy' },
+                { id: 'gear', name: 'Cog Shield', price: 4000, hpBonus: 18, icon: '⚙️', desc: '+18 HP', unlockRank: 8, set: 'mech' },
+                { id: 'money', name: 'Money Bag', price: 5000, hpBonus: 20, icon: '💰', desc: '+20 HP', unlockRank: 9, set: 'rich' },
+                { id: 'shield', name: 'Riot Shield', price: 600, hpBonus: 4, icon: '🛡️', desc: '+4 HP', unlockRank: 1 }
+            ]
+        };
+        
+        const InputModes = {
+            arrows: { keys: ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'], type: 'static', assets: { 'ArrowUp': '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-cyan-400"><path d="m18 15-6-6-6 6"/></svg>', 'ArrowDown': '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-400"><path d="m6 9 6 6 6-6"/></svg>', 'ArrowLeft': '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-violet-400"><path d="m15 18-6-6 6-6"/></svg>', 'ArrowRight': '<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" class="text-rose-400"><path d="m9 18 6-6-6-6"/></svg>' } },
+            letters: { keys: 'abcdefghijklmnopqrstuvwxyz'.split(''), type: 'dynamic' }, 
+            trackpad: { type: 'continuous' }
+        };
+
+        const Customization = {
+            borders: [
+                { id: 'standard', name: 'Slate', price: 0, color: '#475569', unlockRank: 0 },
+                { id: 'white', name: 'Clean', price: 100, color: '#ffffff', unlockRank: 1 }, 
+                { id: 'dashed', name: 'Tactical', price: 500, color: '#94a3b8', unlockRank: 1 },
+                { id: 'gold', name: 'Midas', price: 500, color: '#fbbf24', unlockRank: 2 },
+                { id: 'neon', name: 'Neon', price: 500, color: '#22d3ee', unlockRank: 2 },
+                { id: 'danger', name: 'Danger', price: 500, color: '#ef4444', unlockRank: 3 },
+                { id: 'void', name: 'Void', price: 500, color: '#a78bfa', unlockRank: 4 },
+                { id: 'plasma', name: 'Plasma', price: 1000, color: '#8b5cf6', unlockRank: 5 },
+                { id: 'double_gold', name: 'Double Gold', price: 2000, color: '#d97706', unlockRank: 6 },
+                { id: 'invisible', name: 'Invisible', price: 2000, color: 'transparent', unlockRank: 7 },
+                { id: 'rgb', name: 'RGB', price: 5000, color: '#10b981', unlockRank: 8 }
+            ],
+            fills: [
+                { id: 'standard', name: 'Dark', price: 0, gradient: 'linear-gradient(135deg, #1e293b, #0f172a)', unlockRank: 0 },
+                { id: 'midnight', name: 'Midnight', price: 100, gradient: 'linear-gradient(135deg, #020617, #1e1b4b)', unlockRank: 1 },
+                { id: 'royal', name: 'Royal', price: 100, gradient: 'linear-gradient(135deg, #451a03, #78350f)', unlockRank: 2 },
+                { id: 'cyber', name: 'Cyber', price: 100, gradient: 'linear-gradient(135deg, #0f172a, #06b6d4)', unlockRank: 2 },
+                { id: 'blood', name: 'Blood', price: 100, gradient: 'linear-gradient(135deg, #450a0a, #7f1d1d)', unlockRank: 3 },
+                { id: 'forest', name: 'Forest', price: 500, gradient: 'linear-gradient(135deg, #064e3b, #10b981)', unlockRank: 3 },
+                { id: 'magma', name: 'Magma', price: 500, gradient: 'linear-gradient(135deg, #7f1d1d, #f59e0b)', unlockRank: 4 },
+                { id: 'deep_space', name: 'Deep Space', price: 500, gradient: 'linear-gradient(135deg, #000000, #4c1d95)', unlockRank: 4 },
+                { id: 'holo', name: 'Holo', price: 2000, gradient: 'linear-gradient(135deg, #ec4899, #8b5cf6, #3b82f6)', unlockRank: 5 },
+                { id: 'matrix', name: 'Matrix', price: 1000, gradient: 'linear-gradient(135deg, #000000, #14532d)', unlockRank: 6 },
+                { id: 'blueprint', name: 'Blueprint', price: 500, gradient: 'linear-gradient(135deg, #1e3a8a, #172554)', unlockRank: 7 },
+                { id: 'goldbar', name: 'Gold Bar', price: 5000, gradient: 'linear-gradient(135deg, #fcd34d, #f59e0b, #b45309)', unlockRank: 8 }
+            ],
+            fonts: [
+                { id: 'sans', name: 'Clean', price: 0, family: 'ui-sans-serif, system-ui', unlockRank: 0 },
+                { id: 'serif', name: 'Fancy', price: 100, family: 'ui-serif, serif', unlockRank: 0 },
+                { id: 'mono', name: 'Code', price: 100, family: 'ui-monospace, monospace', unlockRank: 1 },
+                { id: 'comic', name: 'Fun', price: 500, family: '"Comic Sans MS", cursive', unlockRank: 1 },
+                { id: 'arcade', name: 'Arcade', price: 500, family: '"Courier New", monospace', unlockRank: 2 },
+                { id: 'impact', name: 'Heavy', price: 500, family: 'Impact, sans-serif', unlockRank: 3 },
+                { id: 'tech', name: 'Tech', price: 500, family: '"Lucida Console", Monaco, monospace', unlockRank: 4 },
+                { id: 'brush', name: 'Brush', price: 1000, family: 'Brush Script MT, cursive', unlockRank: 5 }
+            ],
+            insignia: [
+                { id: 'none', name: 'None', price: 0, symbol: '', unlockRank: 0 },
+                { id: 'skull', name: 'Death', price: 100, symbol: '💀', unlockRank: 1 },
+                { id: 'fire', name: 'Fire', price: 100, symbol: '🔥', unlockRank: 1 },
+                { id: 'crown', name: 'King', price: 100, symbol: '👑', unlockRank: 1 },
+                { id: 'sword', name: 'War', price: 100, symbol: '⚔️', unlockRank: 1 },
+                { id: 'ogre', name: 'Ogre', price: 100, symbol: '👹', unlockRank: 2 },
+                { id: 'dog', name: 'Dog', price: 100, symbol: '🐶', unlockRank: 2 },
+                { id: 'ghost', name: 'Ghost', price: 1000, symbol: '👻', unlockRank: 3 },
+                { id: 'zap', name: 'Zap', price: 1000, symbol: '⚡', unlockRank: 3 },
+                { id: 'unicorn', name: 'Unicorn', price: 500, symbol: '🦄', unlockRank: 4 },
+                { id: 'money', name: 'Cash', price: 1000, symbol: '💸', unlockRank: 4 },
+                { id: 'trophy', name: 'Trophy', price: 500, symbol: '🏆', unlockRank: 5 },
+                { id: '100', name: '100', price: 500, symbol: '💯', unlockRank: 5 },
+                { id: 'lock', name: 'Secure', price: 100, symbol: '🔒', unlockRank: 6 },
+                { id: 'game', name: 'Game', price: 100, symbol: '🎮', unlockRank: 6 },
+                { id: 'diamond', name: 'Diamond', price: 5000, symbol: '💎', unlockRank: 9 } 
+            ],
+            faces: [
+                { id: 'happy', name: 'Happy', price: 0, symbol: '😀' },
+                { id: 'cool', name: 'Cool', price: 0, symbol: '😎' },
+                { id: 'clown', name: 'Clown', price: 0, symbol: '🤡' },
+                { id: 'money', name: 'Rich', price: 0, symbol: '🤑' },
+                { id: 'skull', name: 'Skull', price: 0, symbol: '💀' },
+                { id: 'alien', name: 'Alien', price: 0, symbol: '👽' },
+                { id: 'robot', name: 'Bot', price: 0, symbol: '🤖' },
+                { id: 'pumpkin', name: 'Jack', price: 0, symbol: '🎃' },
+                { id: 'dog', name: 'Dog', price: 0, symbol: '🐶' },
+                { id: 'cat', name: 'Cat', price: 0, symbol: '🐱' },
+                { id: 'mouse', name: 'Mouse', price: 0, symbol: '🐭' },
+                { id: 'hamster', name: 'Hamster', price: 0, symbol: '🐹' },
+                { id: 'rabbit', name: 'Bunny', price: 0, symbol: '🐰' },
+                { id: 'fox', name: 'Fox', price: 0, symbol: '🦊' },
+                { id: 'bear', name: 'Bear', price: 0, symbol: '🐻' },
+                { id: 'panda', name: 'Panda', price: 0, symbol: '🐼' },
+                { id: 'cry', name: 'Cry', price: 0, symbol: '😭' },
+                { id: 'rage', name: 'Rage', price: 0, symbol: '😡' },
+                { id: 'scream', name: 'Fear', price: 0, symbol: '😱' },
+                { id: 'plead', name: 'Plead', price: 0, symbol: '🥺' },
+                { id: 'party', name: 'Party', price: 0, symbol: '🥳' },
+                { id: 'woozy', name: 'Woozy', price: 0, symbol: '🥴' },
+                { id: 'freeze', name: 'Cold', price: 0, symbol: '🥶' },
+                { id: 'hot', name: 'Hot', price: 0, symbol: '🥵' }
+            ]
+        };
+
+        const game = {
+            startTime: 0, endTime: 0, currentHP: 20, maxHP: 20, playerHealth: 5, maxPlayerHealth: 5,
+            currentArrow: null, isPlaying: false, reactionTimer: null, currentMonster: null, mrains: 0, inputMode: 'arrows',
+            stats: { kills: 0, lifetimeMrains: 0, twiddle: 0, alpha: 0, sync: 0, bestKills: { arrows: null, letters: null, trackpad: null } },
+            inventory: { weapons: ['fist'], powerups: [], helmets: ['none'], bodies: ['clothes'], shields: ['none'], borders: ['standard'], fills: ['standard'], fonts: ['sans'], insignia: ['none'], faces: ['happy'], glitzUnlocked: false },
+            loadout: { weapon: 'fist', powerup: null, helmet: 'none', body: 'clothes', shield: 'none', border: 'standard', fill: 'standard', font: 'sans', insignia: 'none', face: 'happy' },
+            isArrowFrozen: false, powerupUsed: false, streakCharge: 0, lastPressTime: 0,
+            trackpadTargetAngle: 0, trackpadPlayerAngle: 0, lastTrackingTime: 0, trackpadDamageAccumulator: 0, animationFrameId: null, trackpadDirection: 1, lastDirectionCheckTime: 0, trackpadTotalFrames: 0, trackpadHitFrames: 0,
+            
+            // New Word Mode State
+            currentWord: "", currentWordIndex: 0, wordTimer: null, wordStartTime: 0, wordTimeLimit: 3000, wordAnimFrame: null,
+            battleCharacters: 0, // NEW: Track total characters for WPM
+
+            elements: {}, // To be populated in init
+
+            init() {
+                // Initialize Elements Here to guarantee DOM is ready
+                this.elements = {
+                    arrowDisplay: document.getElementById('arrow-display'), monsterDisplay: document.getElementById('monster-display'),
+                    healthBarFill: document.getElementById('health-bar-fill'), healthText: document.getElementById('health-text'),
+                    damageContainer: document.getElementById('damage-container'), resultTime: document.getElementById('result-time'),
+                    resultReward: document.getElementById('result-reward'), resultTitle: document.getElementById('result-title'),
+                    resultIcon: document.getElementById('result-icon'), resultStatsGrid: document.getElementById('result-stats-grid'),
+                    container: document.getElementById('game-container'), inputContainer: document.getElementById('input-container'),
+                    countdownNum: document.getElementById('countdown-num'), postGameControls: document.getElementById('post-game-controls'),
+                    mrainsDisplay: document.getElementById('mrains-display'), previewEmoji: document.getElementById('preview-emoji'),
+                    previewName: document.getElementById('preview-name'), previewHP: document.getElementById('preview-hp'),
+                    previewRarity: document.getElementById('preview-rarity'), confettiContainer: document.getElementById('confetti-container'),
+                    btnModeArrows: document.getElementById('btn-mode-arrows'), btnModeLetters: document.getElementById('btn-mode-letters'), btnModeTrackpad: document.getElementById('btn-mode-trackpad'),
+                    playerLivesText: document.getElementById('player-lives-text'), timerDisplay: document.getElementById('timer-display'),
+                    weaponDisplay: document.getElementById('weapon-display'), storeList: document.getElementById('store-list'),
+                    loadoutWeapon: document.getElementById('loadout-weapon'), loadoutOutfit: document.getElementById('loadout-outfit-score'),
+                    powerupStatus: document.getElementById('powerup-status'), streakBarContainer: document.getElementById('streak-bar-container'),
+                    streakBarFill: document.getElementById('streak-bar-fill'), 
+                    compassDisplay: document.getElementById('compass-display'), compassTarget: document.getElementById('compass-target'), compassPlayer: document.getElementById('compass-player'), compassTrackerDot: document.getElementById('compass-tracker-dot'),
+                    // Word Mode Elements
+                    timerSvg: document.getElementById('timer-svg'), timerCircle: document.querySelector('.timer-circle'), wordTimerBar: document.getElementById('word-timer-bar'),
+                    // Profile & Card
+                    licenseCard: document.getElementById('license-card'), cardName: document.getElementById('card-name'), cardRank: document.getElementById('card-rank'),
+                    cardKills: document.getElementById('card-kills'), cardBrains: document.getElementById('card-brains'), statTwiddle: document.getElementById('stat-twiddle'), statAlpha: document.getElementById('stat-alpha'), statSync: document.getElementById('stat-sync'), 
+                    killTwiddle: document.getElementById('kill-twiddle'), killAlpha: document.getElementById('kill-alpha'), killSync: document.getElementById('kill-sync'),
+                    cardStoreList: document.getElementById('card-store-list'), cardInsigniaIcon: document.getElementById('card-insignia-icon'), cardOutfitRoast: document.getElementById('card-outfit-roast'),
+                    gridHelmet: document.getElementById('grid-helmet'), gridFace: document.getElementById('grid-face'), gridBody: document.getElementById('grid-body'), gridShield: document.getElementById('grid-shield'),
+                    cardBgInsignia: document.getElementById('card-bg-insignia'), cardStatHp: document.getElementById('card-stat-hp'), cardStatPwr: document.getElementById('card-stat-pwr'), cardStatWeapon: document.getElementById('card-stat-weapon'),
+                    // Profile Main Stats
+                    rankName: document.getElementById('rank-name'), rankProgress: document.getElementById('rank-progress'), totalKills: document.getElementById('total-kills'), totalBrains: document.getElementById('total-brains'),
+                    screens: { start: document.getElementById('start-screen'), store: document.getElementById('armory-screen'), settings: document.getElementById('options-screen'), countdown: document.getElementById('countdown-screen'), play: document.getElementById('play-screen'), result: document.getElementById('result-screen'), profile: document.getElementById('profile-screen') },
+                    // Mobile Specific
+                    mobileControls: document.getElementById('mobile-controls'), dpadControls: document.getElementById('dpad-controls'), trackpadHint: document.getElementById('trackpad-hint'), wordHint: document.getElementById('word-hint'), btnRevive: document.getElementById('btn-revive'),
+                    adOverlay: document.getElementById('ad-overlay'), adProgress: document.getElementById('ad-progress')
+                };
+
+                try {
+                    const savedMode = localStorage.getItem(GameConfig.storageKeyInputMode); if (savedMode && InputModes[savedMode]) this.inputMode = savedMode;
+                    const savedMrains = localStorage.getItem(GameConfig.storageKeyMrains); 
+                    if(savedMrains) this.mrains = parseInt(savedMrains);
+                    
+                    const savedInv = localStorage.getItem(GameConfig.storageKeyInventory); 
+                    if (savedInv) {
+                        const parsedInv = JSON.parse(savedInv);
+                        this.inventory = { ...this.inventory, ...parsedInv };
+                        if (!this.inventory.helmets) this.inventory.helmets = ['none'];
+                        if (!this.inventory.bodies) this.inventory.bodies = ['clothes'];
+                        if (!this.inventory.shields) this.inventory.shields = ['none'];
+                        if (!this.inventory.faces) this.inventory.faces = ['happy'];
+                        if (!this.inventory.insignia) this.inventory.insignia = ['none'];
+                        // Migration from glitz to insignia
+                        if (this.inventory.glitz) {
+                            this.inventory.insignia = [...new Set([...this.inventory.insignia, ...this.inventory.glitz])];
+                            delete this.inventory.glitz;
+                        }
+                    }
+                    
+                    const savedLoad = localStorage.getItem(GameConfig.storageKeyLoadout); 
+                    if (savedLoad) {
+                        const parsedLoad = JSON.parse(savedLoad);
+                        this.loadout = { ...this.loadout, ...parsedLoad };
+                        if(!this.loadout.helmet) this.loadout.helmet = 'none';
+                        if(!this.loadout.body) this.loadout.body = 'clothes';
+                        if(!this.loadout.shield) this.loadout.shield = 'none';
+                        if(!this.loadout.face) this.loadout.face = 'happy';
+                        if(!this.loadout.insignia && this.loadout.glitz) { this.loadout.insignia = this.loadout.glitz; delete this.loadout.glitz; }
+                        if(!this.loadout.insignia) this.loadout.insignia = 'none';
+                    }
+
+                    const savedStats = localStorage.getItem(GameConfig.storageKeyStats); 
+                    if (savedStats) {
+                        const parsed = JSON.parse(savedStats);
+                        this.stats = { ...this.stats, ...parsed };
+                        if (!this.stats.bestKills) this.stats.bestKills = { arrows: null, letters: null, trackpad: null };
+                        if(this.stats.kills < 10000) this.stats.kills = 10000;
+                    } else {
+                        this.stats.kills = 10000;
+                    }
+                } catch(e) { console.log('Save data init check'); }
+
+                this.updateMrainsDisplay(); 
+                if(this.elements.loadoutWeapon) this.updateLoadoutUI(); 
+                this.updateProfileUI(); 
+                this.rerollMonster();
+                
+                window.addEventListener('keydown', (e) => {
+                    if (this.isPlaying && this.inputMode !== 'trackpad') { 
+                        const activeKeys = InputModes[this.inputMode].keys; const keyPressed = e.key.length === 1 ? e.key.toLowerCase() : e.key; 
+                        if (e.code === 'Space' && !this.powerupUsed && this.loadout.powerup === 'stopper') { if (this.streakCharge >= 10) { e.preventDefault(); this.activatePowerUp(); } return; }
+                        if (activeKeys.includes(keyPressed)) { e.preventDefault(); this.handleInput(keyPressed); }
+                    }
+                });
+                window.addEventListener('mousemove', (e) => {
+                    if (this.isPlaying && this.inputMode === 'trackpad') {
+                        const rect = this.elements.inputContainer.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2;
+                        const deltaX = e.clientX - centerX; const deltaY = e.clientY - centerY; const angle = Math.atan2(deltaX, -deltaY) * (180 / Math.PI);
+                        this.trackpadPlayerAngle = angle; this.elements.compassPlayer.style.transform = `rotate(${angle}deg)`;
+                    }
+                });
+
+                // MOBILE TOUCH SUPPORT ADDED
+                window.addEventListener('touchmove', (e) => {
+                    if (this.isPlaying && this.inputMode === 'trackpad') {
+                        e.preventDefault();
+                        const touch = e.touches[0];
+                        const rect = this.elements.inputContainer.getBoundingClientRect(); const centerX = rect.left + rect.width / 2; const centerY = rect.top + rect.height / 2;
+                        const deltaX = touch.clientX - centerX; const deltaY = touch.clientY - centerY; const angle = Math.atan2(deltaX, -deltaY) * (180 / Math.PI);
+                        this.trackpadPlayerAngle = angle; this.elements.compassPlayer.style.transform = `rotate(${angle}deg)`;
+                    }
+                }, { passive: false });
+
+                window.addEventListener('dblclick', (e) => {
+                    if (this.isPlaying && this.inputMode === 'trackpad' && !this.powerupUsed && this.loadout.powerup === 'stopper' && this.streakCharge >= 10) { e.preventDefault(); this.activatePowerUp(); }
+                });
+                
+                // MOBILE POWERUP TRIGGER (Tap the container if charged)
+                this.elements.inputContainer.addEventListener('touchstart', (e) => {
+                    if (this.isPlaying && this.loadout.powerup === 'stopper' && this.streakCharge >= 10 && !this.powerupUsed) {
+                        e.preventDefault();
+                        this.activatePowerUp();
+                    }
+                });
+            },
+
+            // --- Ad Logic ---
+            watchAd(rewardAmount) {
+                // This is a mockup. In real code, you would call AdMob/UnityAds here.
+                this.elements.adOverlay.classList.remove('hidden');
+                this.elements.adOverlay.classList.add('flex');
+                this.elements.adProgress.style.width = '0%';
+                
+                setTimeout(() => { this.elements.adProgress.style.width = '100%'; }, 50);
+
+                setTimeout(() => {
+                    this.elements.adOverlay.classList.add('hidden');
+                    this.elements.adOverlay.classList.remove('flex');
+                    this.mrains += rewardAmount;
+                    this.updateMrainsDisplay();
+                    this.saveData();
+                    alert(`Thanks for watching! Recieved +${rewardAmount} Brains.`);
+                }, 3100);
+            },
+
+            watchReviveAd() {
+                this.elements.adOverlay.classList.remove('hidden');
+                this.elements.adOverlay.classList.add('flex');
+                this.elements.adProgress.style.width = '0%';
+                
+                setTimeout(() => { this.elements.adProgress.style.width = '100%'; }, 50);
+
+                setTimeout(() => {
+                    this.elements.adOverlay.classList.add('hidden');
+                    this.elements.adOverlay.classList.remove('flex');
+                    // Revive Logic
+                    this.playerHealth = Math.floor(this.maxPlayerHealth * 0.5);
+                    this.currentHP = this.currentMonster.hp; // Reset enemy hp too or keep? Let's reset enemy to make it fair duel again or keep damage? 
+                    // Better: Keep enemy damage, give player health.
+                    this.updatePlayerLifeUI();
+                    this.clearCracks();
+                    this.switchScreen('play');
+                    this.isPlaying = true;
+                    if(this.inputMode === 'arrows' || this.inputMode === 'trackpad') this.nextArrow();
+                    if(this.inputMode === 'letters') this.nextWord();
+                    if(this.inputMode === 'trackpad') this.trackpadLoop();
+
+                }, 3100);
+            },
+
+            getOutfitRating() {
+                const h = Items.helmets.find(i => i.id === this.loadout.helmet);
+                const b = Items.bodies.find(i => i.id === this.loadout.body);
+                const s = Items.shields.find(i => i.id === this.loadout.shield);
+                
+                let bonus = 0;
+                let remark = "";
+                const defaults = [
+                    "A tragic misunderstanding of fashion.", "Are you fighting or begging?", "I've seen better dressed corpses.", 
+                    "Did you lose a bet?", "Stylishly incompetent.", "Fashion is not your endgame.", "You look... unique.",
+                    "Monsters might die laughing.", "Chaos in clothing form.", "Zero style points awarded.", "My eyes are bleeding.",
+                    "Function over form? Hardly.", "A bold choice. Wrong, but bold.", "Randomized Sim vibes.", "Did you get dressed in the dark?",
+                    "Hot mess express.", "This outfit insults the mirror.", "Walking flea market.", "Please put a bag over it.", "Yikes."
+                ];
+
+                if (h.set && h.set === b.set && b.set === s.set) {
+                    bonus += 10;
+                    if (h.set === 'poop') remark = "You smell like victory... mostly manure.";
+                    else if (h.set === 'royal') remark = "All hail the King of Losers.";
+                    else if (h.set === 'ninja') remark = "Silent, deadly, and coordinated.";
+                    else if (h.set === 'magic') remark = "Yer a wizard, Harry. A bad one.";
+                    else if (h.set === 'alien') remark = "Take me to your leader's tailor.";
+                    else if (h.set === 'evil') remark = "Edgelord supreme.";
+                    else if (h.set === 'holy') remark = "Holier than thou art.";
+                    else if (h.set === 'mech') remark = "Domo arigato, Mr. Roboto.";
+                    else if (h.set === 'rich') remark = "Money can't buy taste.";
+                } else if (h.set && (h.set === b.set || h.set === s.set || b.set === s.set)) {
+                    bonus += 3;
+                    remark = "Almost a look. Almost.";
+                } else if (h.id === 'none' && b.id === 'clothes' && s.id === 'none') {
+                    remark = "Classic NPC energy.";
+                } else if (h.id === 'poophat' && s.id === 'heart') {
+                    remark = "Love stinks, doesn't it?";
+                } else if (h.id === 'diamond' && b.id === 'clothes') {
+                    remark = "Spent all cash on the hat?";
+                } else if (b.id === 'eggplant') {
+                    remark = "Compensating for something?";
+                }
+
+                if (!remark) remark = defaults[Math.floor(Math.random() * defaults.length)];
+                
+                return { bonus, remark };
+            },
+
+            openProfile() { this.updateCardUI(); this.filterCardStore('borders'); this.switchScreen('profile'); },
+            updateCardUI() {
+                const rank = HunterRanks.findLast(r => this.stats.kills >= r.kills) || HunterRanks[0];
+                this.elements.cardName.innerText = "WARRIOR"; 
+                this.elements.cardRank.innerText = rank.name;
+                this.elements.cardKills.innerText = this.stats.kills;
+                this.elements.cardBrains.innerText = this.stats.lifetimeMrains;
+                
+                const outfit = this.getOutfitRating();
+                this.elements.cardOutfitRoast.innerText = `"${outfit.remark}"`;
+
+                this.elements.statTwiddle.innerText = this.stats.twiddle ? `${this.stats.twiddle}ms` : '--';
+                this.elements.statAlpha.innerText = this.stats.alpha ? `${this.stats.alpha} WPM` : '--';
+                this.elements.statSync.innerText = this.stats.sync ? `${this.stats.sync}%` : '--';
+
+                const best = this.stats.bestKills;
+                this.elements.killTwiddle.innerText = best.arrows ? `${best.arrows.emoji} ${best.arrows.name}` : '--';
+                this.elements.killAlpha.innerText = best.letters ? `${best.letters.emoji} ${best.letters.name}` : '--';
+                this.elements.killSync.innerText = best.trackpad ? `${best.trackpad.emoji} ${best.trackpad.name}` : '--';
+
+                const border = Customization.borders.find(b => b.id === this.loadout.border) || Customization.borders[0];
+                const fill = Customization.fills.find(f => f.id === this.loadout.fill) || Customization.fills[0];
+                const font = Customization.fonts.find(f => f.id === this.loadout.font) || Customization.fonts[0];
+                const insignia = Customization.insignia.find(g => g.id === this.loadout.insignia) || Customization.insignia[0];
+                
+                // Gear Icons
+                const helm = Items.helmets.find(i => i.id === this.loadout.helmet) || Items.helmets[0];
+                const face = Customization.faces.find(f => f.id === this.loadout.face) || Customization.faces[0];
+                const body = Items.bodies.find(i => i.id === this.loadout.body) || Items.bodies[0];
+                const shield = Items.shields.find(i => i.id === this.loadout.shield) || Items.shields[0];
+                const weapon = Items.weapons.find(w => w.id === this.loadout.weapon) || Items.weapons[0];
+
+                // Calculate Stats
+                const armorBonus = (helm.hpBonus || 0) + (body.hpBonus || 0) + (shield.hpBonus || 0) + outfit.bonus;
+                const totalHP = GameConfig.basePlayerHP + armorBonus;
+                const power = weapon.power;
+
+                // Update Grid UI in HTML Preview
+                this.elements.gridHelmet.innerText = helm ? helm.icon : '';
+                this.elements.gridFace.innerText = face ? face.symbol : '';
+                this.elements.gridBody.innerText = body ? body.icon : '';
+                this.elements.gridShield.innerText = shield ? shield.icon : '';
+
+                // Update Stats UI in HTML Preview
+                this.elements.cardStatHp.innerText = totalHP;
+                this.elements.cardStatPwr.innerText = power;
+                this.elements.cardStatWeapon.innerText = weapon.icon;
+
+                const card = this.elements.licenseCard;
+                card.style.borderColor = border.color;
+                card.style.background = fill.gradient;
+                card.style.fontFamily = font.family;
+                
+                if (border.id === 'dashed') card.style.borderStyle = 'dashed';
+                else card.style.borderStyle = 'solid';
+                
+                this.elements.cardInsigniaIcon.innerText = insignia.symbol;
+                this.elements.cardBgInsignia.innerText = insignia.symbol; // Background Watermark
+            },
+            getRankIndex(kills) {
+                for (let i = HunterRanks.length - 1; i >= 0; i--) {
+                    if (kills >= HunterRanks[i].kills) return i;
+                }
+                return 0;
+            },
+            filterCardStore(category) {
+                ['borders', 'fills', 'fonts', 'insignia', 'faces'].forEach(t => {
+                    const btn = document.getElementById(`btn-tab-${t}`);
+                    if(t === category) btn.className = "px-2 py-1 text-[10px] uppercase font-bold bg-slate-700 rounded text-slate-300 flex-shrink-0";
+                    else btn.className = "px-2 py-1 text-[10px] uppercase font-bold bg-slate-800 rounded text-slate-500 hover:text-white flex-shrink-0";
+                });
+                const list = this.elements.cardStoreList; list.innerHTML = '';
+                
+                // Insignia lock logic
+                if (category === 'insignia' && !this.inventory.glitzUnlocked) {
+                    list.innerHTML = `<div class="col-span-3 p-4 bg-slate-800/80 rounded border border-yellow-500 text-center"><p class="text-xs text-yellow-400 font-bold mb-2">LOCKED TECHNOLOGY</p><p class="text-[10px] text-slate-400 mb-3">Pay to unlock Insignias.</p><button onclick="game.unlockGlitz()" class="px-4 py-2 bg-yellow-500 hover:bg-yellow-400 text-slate-900 font-bold text-xs rounded uppercase">Unlock (1000 🧠)</button></div>`;
+                    return;
+                }
+                
+                const currentRankIdx = this.getRankIndex(this.stats.kills);
+
+                Customization[category].forEach(item => {
+                    // Check ownership
+                    let owned = false;
+                    if (category === 'faces') owned = true; // Faces free
+                    else if (category === 'insignia') owned = (item.id === 'none') || (this.inventory.insignia && this.inventory.insignia.includes(item.id));
+                    else owned = (this.inventory[category] && this.inventory[category].includes(item.id));
+                    
+                    const isFree = item.price === 0;
+                    const isOwned = owned || isFree;
+                    
+                    // Check equipped
+                    let equipped = false;
+                    if (category === 'borders') equipped = this.loadout.border === item.id;
+                    if (category === 'fills') equipped = this.loadout.fill === item.id;
+                    if (category === 'fonts') equipped = this.loadout.font === item.id;
+                    if (category === 'insignia') equipped = this.loadout.insignia === item.id;
+                    if (category === 'faces') equipped = this.loadout.face === item.id;
+
+                    const locked = (item.unlockRank !== undefined && currentRankIdx < item.unlockRank);
+                    
+                    const el = document.createElement('div');
+                    el.className = `p-2 rounded border flex flex-col items-center justify-between h-20 relative overflow-hidden ${equipped ? 'border-emerald-400 bg-slate-700' : 'border-slate-600 bg-slate-800'} ${locked ? 'opacity-70' : 'cursor-pointer'}`;
+                    
+                    // Preview
+                    let preview = '';
+                    if(category === 'borders') preview = `<div class="w-full h-2 rounded" style="background:${item.color}; border: 2px ${item.id === 'dashed' ? 'dashed' : 'solid'} white;"></div>`;
+                    if(category === 'fills') preview = `<div class="w-full h-4 rounded" style="background:${item.gradient}"></div>`;
+                    if(category === 'fonts') preview = `<div class="text-xs" style="font-family:${item.family}">Abc</div>`;
+                    if(category === 'insignia' || category === 'faces') preview = `<div class="text-2xl">${item.symbol}</div>`;
+                    
+                    let content = `${preview}<div class="text-[8px] font-bold uppercase text-white mt-1 text-center leading-tight truncate w-full">${item.name}</div>`;
+                    
+                    if (locked) {
+                        const requiredRank = HunterRanks[item.unlockRank].name;
+                        el.innerHTML = `${content}<div class="absolute inset-0 bg-slate-900/80 flex items-center justify-center flex-col"><span class="text-lg">🔒</span><span class="text-[8px] text-yellow-500 font-bold uppercase text-center leading-none px-1">${requiredRank}</span></div>`;
+                    } else if (isOwned) {
+                        if(equipped) el.innerHTML = `${content}<div class="text-[8px] text-emerald-400 font-bold">ACTIVE</div>`;
+                        else el.innerHTML = `${content}<button onclick="game.equipCardItem('${category}', '${item.id}')" class="text-[8px] bg-white/20 hover:bg-white/40 px-2 py-0.5 rounded text-white w-full mt-1">EQUIP</button>`;
+                    } else {
+                        const canAfford = this.mrains >= item.price;
+                        el.innerHTML = `${content}<button onclick="game.buyCardItem('${category}', '${item.id}')" class="text-[8px] ${canAfford ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 opacity-50'} px-1 py-0.5 rounded text-white w-full mt-1">${item.price} 🧠</button>`;
+                    }
+                    list.appendChild(el);
+                });
+            },
+            unlockGlitz() { if (this.mrains >= 1000) { this.mrains -= 1000; this.inventory.glitzUnlocked = true; this.saveData(); this.updateMrainsDisplay(); this.filterCardStore('insignia'); } },
+            buyCardItem(category, id) { const item = Customization[category].find(i => i.id === id); if (!item || this.mrains < item.price) return; this.mrains -= item.price; if (!this.inventory[category]) this.inventory[category] = []; this.inventory[category].push(id); this.saveData(); this.updateMrainsDisplay(); this.filterCardStore(category); },
+            equipCardItem(category, id) { 
+                const key = category === 'borders' ? 'border' : (category === 'fills' ? 'fill' : (category === 'fonts' ? 'font' : (category === 'faces' ? 'face' : 'insignia'))); 
+                this.loadout[key] = id; this.saveData(); this.filterCardStore(category); this.updateCardUI(); 
+            },
+            mintLicense() {
+                const scale = 3;
+                const w = 600 * scale;
+                const h = 350 * scale;
+                const canvas = document.getElementById('license-canvas');
+                canvas.width = w;
+                canvas.height = h;
+                const ctx = canvas.getContext('2d');
+                
+                const rank = HunterRanks.findLast(r => this.stats.kills >= r.kills) || HunterRanks[0];
+                const border = Customization.borders.find(b => b.id === this.loadout.border) || Customization.borders[0];
+                const fill = Customization.fills.find(f => f.id === this.loadout.fill) || Customization.fills[0];
+                const fontObj = Customization.fonts.find(f => f.id === this.loadout.font) || Customization.fonts[0];
+                const insignia = Customization.insignia.find(g => g.id === this.loadout.insignia) || Customization.insignia[0];
+                const outfit = this.getOutfitRating();
+
+                // Get Font Name clean
+                let fontName = 'sans-serif';
+                if (fontObj.family.includes('serif')) fontName = 'serif';
+                if (fontObj.family.includes('monospace')) fontName = 'monospace';
+                if (fontObj.family.includes('cursive')) fontName = 'cursive';
+                if (fontObj.family.includes('Courier')) fontName = 'Courier New';
+                if (fontObj.family.includes('Impact')) fontName = 'Impact';
+                
+                // Get Gear for Mint
+                const helm = Items.helmets.find(i => i.id === this.loadout.helmet) || Items.helmets[0];
+                const body = Items.bodies.find(i => i.id === this.loadout.body) || Items.bodies[0];
+                const shield = Items.shields.find(i => i.id === this.loadout.shield) || Items.shields[0];
+                const face = Customization.faces.find(f => f.id === this.loadout.face) || Customization.faces[0];
+                const weapon = Items.weapons.find(w => w.id === this.loadout.weapon) || Items.weapons[0];
+
+                // Calculate Stats for Canvas
+                const armorBonus = (helm.hpBonus || 0) + (body.hpBonus || 0) + (shield.hpBonus || 0) + outfit.bonus;
+                const totalHP = GameConfig.basePlayerHP + armorBonus;
+                const power = weapon.power;
+
+                // Background
+                const grad = ctx.createLinearGradient(0, 0, w, h);
+                if(fill.id.includes('dark') || fill.id === 'standard') { grad.addColorStop(0, '#1e293b'); grad.addColorStop(1, '#0f172a'); }
+                else if(fill.id === 'midnight') { grad.addColorStop(0, '#020617'); grad.addColorStop(1, '#1e1b4b'); }
+                else if(fill.id === 'royal') { grad.addColorStop(0, '#451a03'); grad.addColorStop(1, '#78350f'); }
+                else if(fill.id === 'cyber') { grad.addColorStop(0, '#0f172a'); grad.addColorStop(1, '#06b6d4'); }
+                else if(fill.id === 'blood') { grad.addColorStop(0, '#450a0a'); grad.addColorStop(1, '#7f1d1d'); }
+                else if(fill.id === 'magma') { grad.addColorStop(0, '#7f1d1d'); grad.addColorStop(1, '#f59e0b'); }
+                else if(fill.id === 'deep_space') { grad.addColorStop(0, '#000000'); grad.addColorStop(1, '#4c1d95'); }
+                else if(fill.id === 'forest') { grad.addColorStop(0, '#064e3b'); grad.addColorStop(1, '#10b981'); }
+                else if(fill.id === 'holo') { grad.addColorStop(0, '#ec4899'); grad.addColorStop(0.5, '#8b5cf6'); grad.addColorStop(1, '#3b82f6'); }
+                else if(fill.id === 'goldbar') { grad.addColorStop(0, '#fcd34d'); grad.addColorStop(0.5, '#f59e0b'); grad.addColorStop(1, '#b45309'); }
+                else if(fill.id === 'matrix') { grad.addColorStop(0, '#000000'); grad.addColorStop(1, '#14532d'); }
+                else if(fill.id === 'blueprint') { grad.addColorStop(0, '#1e3a8a'); grad.addColorStop(1, '#172554'); }
+                
+                ctx.fillStyle = grad; 
+                ctx.fillRect(0, 0, w, h);
+
+                // Watermark (Background Insignia)
+                if (insignia.symbol) { 
+                    ctx.save(); 
+                    ctx.translate(w/2, h/2); 
+                    ctx.rotate(-15 * Math.PI / 180); 
+                    ctx.globalAlpha = 0.15; 
+                    ctx.fillStyle = '#ffffff'; 
+                    ctx.font = `${140 * scale}px serif`; 
+                    ctx.textAlign = 'center'; 
+                    ctx.textBaseline = 'middle'; 
+                    ctx.fillText(insignia.symbol, 0, 0); 
+                    ctx.restore(); 
+                }
+                
+                // Border
+                ctx.strokeStyle = border.color; 
+                ctx.lineWidth = 10 * scale; 
+                if (border.id === 'dashed') ctx.setLineDash([20 * scale, 15 * scale]); else ctx.setLineDash([]);
+                ctx.strokeRect(0, 0, w, h);
+                ctx.setLineDash([]); // Reset
+
+                // Padding reference
+                const p = 20 * scale;
+
+                // --- TOP RIGHT: INSIGNIA ---
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = `bold ${10 * scale}px ${fontName}`;
+                ctx.fillText("INSIGNIA", w - (50 * scale), p + (15 * scale));
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `${30 * scale}px serif`;
+                if(insignia.symbol) ctx.fillText(insignia.symbol, w - (50 * scale), p + (50 * scale));
+
+                // --- COMBAT STATS (Left of Insignia) ---
+                const statsX = w - (110 * scale); // Position to left of insignia
+                const statsY = p + (15 * scale);
+                
+                // HP Row
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#f87171'; // Red-400
+                ctx.font = `bold ${12 * scale}px ${fontName}`;
+                ctx.fillText("HP", statsX, statsY);
+                
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${14 * scale}px monospace`;
+                ctx.fillText(totalHP, statsX + (10*scale), statsY);
+
+                // PWR Row
+                const pwrY = statsY + (25 * scale);
+                ctx.textAlign = 'right';
+                ctx.fillStyle = '#facc15'; // Yellow-400
+                ctx.font = `bold ${12 * scale}px ${fontName}`;
+                ctx.fillText("PWR", statsX, pwrY);
+                
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${14 * scale}px monospace`;
+                ctx.fillText(power, statsX + (10*scale), pwrY);
+                
+                // Weapon Icon next to PWR
+                ctx.font = `${14 * scale}px serif`;
+                ctx.fillText(weapon.icon, statsX + (45*scale), pwrY);
+
+
+                // --- TOP LEFT: 2x2 GEAR GRID ---
+                const gridStartX = p + (15 * scale);
+                const gridStartY = p + (15 * scale);
+                const boxSize = 35 * scale;
+                const spacing = 5 * scale;
+
+                const drawGridBox = (row, col, emoji) => {
+                    const bx = gridStartX + (col * (boxSize + spacing));
+                    const by = gridStartY + (row * (boxSize + spacing));
+                    
+                    // Box BG
+                    ctx.fillStyle = 'rgba(0,0,0,0.3)';
+                    ctx.fillRect(bx, by, boxSize, boxSize);
+                    
+                    // Emoji
+                    if(emoji) {
+                        ctx.fillStyle = '#fff';
+                        ctx.font = `${20 * scale}px serif`;
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(emoji, bx + boxSize/2, by + boxSize/2 + (2*scale));
+                    }
+                };
+
+                // Row 0, Col 0: Helmet
+                drawGridBox(0, 0, helm && helm.icon ? helm.icon : '🧢');
+                // Row 0, Col 1: Face
+                drawGridBox(0, 1, face && face.symbol ? face.symbol : '😎');
+                // Row 1, Col 0: Body
+                drawGridBox(1, 0, body && body.icon ? body.icon : '👕');
+                // Row 1, Col 1: Shield
+                drawGridBox(1, 1, shield && shield.icon ? shield.icon : '🛡️');
+
+                // TEXT INFO (Right of Grid)
+                const infoX = gridStartX + (boxSize * 2) + spacing + (20 * scale);
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                
+                ctx.fillStyle = 'rgba(255,255,255,0.7)';
+                ctx.font = `${10 * scale}px ${fontName}`;
+                ctx.fillText("OPERATIVE", infoX, p + (10 * scale));
+
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `black ${32 * scale}px ${fontName}`;
+                ctx.fillText("WARRIOR", infoX, p + (23 * scale));
+
+                ctx.fillStyle = '#fbbf24';
+                ctx.font = `bold ${16 * scale}px ${fontName}`;
+                ctx.fillText(rank.name.toUpperCase(), infoX, p + (55 * scale));
+
+                // Roast
+                ctx.fillStyle = '#67e8f9'; // Cyan
+                ctx.font = `italic ${12 * scale}px ${fontName}`;
+                ctx.fillText(`"${outfit.remark}"`, infoX, p + (75 * scale));
+
+                // STATS GRID (Middle)
+                const gridY = gridStartY + (boxSize*2) + spacing + (40 * scale);
+                const boxW = (w - (p*2) - (10*scale)) / 2;
+                const boxH = 50 * scale;
+                
+                // Box 1 (Kills)
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.roundRect(p + (10*scale), gridY, boxW, boxH, 5*scale); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.font = `${10 * scale}px ${fontName}`;
+                ctx.textAlign = 'left';
+                ctx.fillText("KILLS", p + (20*scale), gridY + (10*scale));
+                ctx.fillStyle = '#ffffff';
+                ctx.font = `bold ${20 * scale}px monospace`;
+                ctx.fillText(this.stats.kills, p + (20*scale), gridY + (25*scale));
+
+                // Box 2 (Brains)
+                ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                ctx.beginPath(); ctx.roundRect(p + (10*scale) + boxW + (10*scale), gridY, boxW, boxH, 5*scale); ctx.fill();
+                ctx.fillStyle = 'rgba(255,255,255,0.6)';
+                ctx.font = `${10 * scale}px ${fontName}`;
+                ctx.fillText("BRAINS", p + (20*scale) + boxW + (10*scale), gridY + (10*scale));
+                ctx.fillStyle = '#34d399';
+                ctx.font = `bold ${20 * scale}px monospace`;
+                ctx.fillText(this.stats.lifetimeMrains, p + (20*scale) + boxW + (10*scale), gridY + (25*scale));
+
+                // CHAMPIONS LIST (Bottom)
+                const listY = gridY + boxH + (15 * scale);
+                
+                // Header Line
+                ctx.fillStyle = 'rgba(255,255,255,0.5)';
+                ctx.font = `${10 * scale}px ${fontName}`;
+                ctx.fillText("CHAMPIONS (BEST KILL)", p + (10*scale), listY);
+                ctx.fillRect(p + (10*scale), listY + (12*scale), w - (p*2) - (20*scale), 1*scale);
+
+                // Rows
+                const drawChampRow = (y, label, killObj, statVal, statSuffix) => {
+                    const rowY = y;
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = `${12 * scale}px ${fontName}`;
+                    ctx.textAlign = 'left';
+                    ctx.fillText(label, p + (10*scale), rowY);
+
+                    ctx.textAlign = 'center';
+                    if (killObj) {
+                        ctx.fillStyle = '#fcd34d';
+                        ctx.font = `bold ${12 * scale}px ${fontName}`;
+                        ctx.fillText(`${killObj.emoji} ${killObj.name}`, w/2, rowY);
+                    } else {
+                        ctx.fillStyle = 'rgba(255,255,255,0.3)';
+                        ctx.fillText("--", w/2, rowY);
+                    }
+
+                    ctx.textAlign = 'right';
+                    ctx.fillStyle = statVal ? '#22d3ee' : 'rgba(255,255,255,0.3)';
+                    if (label.includes("Alpha")) ctx.fillStyle = statVal ? '#fb7185' : 'rgba(255,255,255,0.3)';
+                    if (label.includes("Sync")) ctx.fillStyle = statVal ? '#34d399' : 'rgba(255,255,255,0.3)';
+                    
+                    ctx.font = `bold ${14 * scale}px monospace`;
+                    ctx.fillText(statVal ? `${statVal}${statSuffix}` : '--', w - p - (15*scale), rowY);
+                };
+
+                const startY = listY + (30 * scale);
+                const gap = 25 * scale;
+                const best = this.stats.bestKills || {};
+
+                drawChampRow(startY, "Twiddle (Arrow)", best.arrows, this.stats.twiddle, "ms");
+                drawChampRow(startY + gap, "Alpha (Words)", best.letters, this.stats.alpha, " WPM");
+                drawChampRow(startY + gap*2, "Sync (Track)", best.trackpad, this.stats.sync, "%");
+
+                try {
+                    const link = document.createElement('a'); 
+                    link.download = `emoji_hunter_license_${Date.now()}.png`; 
+                    link.href = canvas.toDataURL(); 
+                    document.body.appendChild(link); // Required for some environments
+                    link.click();
+                    document.body.removeChild(link);
+                } catch(e) {
+                    alert("Download blocked by environment security. The image is generated on the canvas above!");
+                }
+            },
+            updateProfileUI() { let currentRank = HunterRanks[0]; let nextRank = HunterRanks[HunterRanks.length - 1]; for (let i = 0; i < HunterRanks.length; i++) { if (this.stats.kills >= HunterRanks[i].kills) { currentRank = HunterRanks[i]; if (i < HunterRanks.length - 1) nextRank = HunterRanks[i+1]; else nextRank = null; } } this.elements.rankName.innerText = currentRank.name; this.elements.totalKills.innerText = this.stats.kills; this.elements.totalBrains.innerText = this.stats.lifetimeMrains; if (nextRank) { const range = nextRank.kills - currentRank.kills; const progress = this.stats.kills - currentRank.kills; this.elements.rankProgress.style.width = `${Math.min(100, Math.max(0, (progress / range) * 100))}%`; } else { this.elements.rankProgress.style.width = '100%'; } },
+            saveData() { localStorage.setItem(GameConfig.storageKeyMrains, this.mrains); localStorage.setItem(GameConfig.storageKeyInventory, JSON.stringify(this.inventory)); localStorage.setItem(GameConfig.storageKeyLoadout, JSON.stringify(this.loadout)); localStorage.setItem(GameConfig.storageKeyStats, JSON.stringify(this.stats)); },
+            updateMrainsDisplay() { this.elements.mrainsDisplay.innerText = this.mrains; },
+            openStore() { this.switchScreen('store'); this.filterStore('weapons'); },
+            openOptions() { this.updateOptionsUI(); this.switchScreen('settings'); },
+            setInputMode(mode) { this.inputMode = mode; localStorage.setItem(GameConfig.storageKeyInputMode, mode); this.updateOptionsUI(); },
+            switchScreen(screenName) { Object.values(this.elements.screens).forEach(el => el.classList.add('hidden')); this.elements.screens[screenName].classList.remove('hidden'); },
+            filterStore(category) { 
+                ['weapons', 'powerups', 'helmets', 'bodies', 'shields'].forEach(t => { 
+                    const btn = document.getElementById(`tab-${t}`); 
+                    // Handle buttons that might not exist in old DOM if I missed updating HTML, but I updated it above
+                    if (btn) {
+                        if(t === category) btn.className = "px-2 text-[10px] font-bold py-2 bg-slate-700 rounded text-white flex-shrink-0"; 
+                        else btn.className = "px-2 text-[10px] font-bold py-2 bg-slate-800 rounded text-slate-400 hover:text-white flex-shrink-0"; 
+                    }
+                }); 
+                const list = this.elements.storeList; 
+                list.innerHTML = ''; 
+                const items = Items[category] || []; 
+                if (items.length === 0) { list.innerHTML = '<div class="text-center text-slate-500 py-10">Out of Stock</div>'; return; } 
+                
+                const currentRankIdx = this.getRankIndex(this.stats.kills);
+
+                items.forEach(item => { 
+                    let owned = false;
+                    let equipped = false;
+                    
+                    if (category === 'weapons') { owned = this.inventory.weapons.includes(item.id); equipped = this.loadout.weapon === item.id; }
+                    else if (category === 'powerups') { owned = this.inventory.powerups.includes(item.id); equipped = this.loadout.powerup === item.id; }
+                    else if (category === 'helmets') { owned = this.inventory.helmets.includes(item.id); equipped = this.loadout.helmet === item.id; }
+                    else if (category === 'bodies') { owned = this.inventory.bodies.includes(item.id); equipped = this.loadout.body === item.id; }
+                    else if (category === 'shields') { owned = this.inventory.shields.includes(item.id); equipped = this.loadout.shield === item.id; }
+
+                    const locked = (item.unlockRank !== undefined && currentRankIdx < item.unlockRank);
+
+                    const el = document.createElement('div'); 
+                    el.className = `p-3 bg-slate-800 rounded border ${equipped ? 'border-emerald-500' : 'border-slate-700'} flex justify-between items-center ${locked ? 'opacity-60' : ''}`; 
+                    
+                    let actionBtn = ''; 
+                    
+                    if (locked) {
+                        const requiredRank = HunterRanks[item.unlockRank].name;
+                        actionBtn = `<span class="text-[10px] text-yellow-500 font-bold uppercase border border-yellow-500/30 bg-yellow-500/10 px-2 py-1 rounded">🔒 ${requiredRank}</span>`;
+                    } else if (owned) { 
+                        if (equipped) actionBtn = `<span class="text-xs text-emerald-500 font-bold uppercase">Equipped</span>`; 
+                        else actionBtn = `<button onclick="game.equipItem('${category}', '${item.id}')" class="px-3 py-1 bg-slate-700 hover:bg-slate-600 text-[10px] font-bold uppercase rounded">Equip</button>`; 
+                    } else { 
+                        const canAfford = this.mrains >= item.price; 
+                        actionBtn = `<button onclick="game.buyItem('${category}', '${item.id}')" class="px-3 py-1 ${canAfford ? 'bg-emerald-600 hover:bg-emerald-500' : 'bg-slate-700 opacity-50 cursor-not-allowed'} text-white text-[10px] font-bold uppercase rounded">${item.price} 🧠</button>`; 
+                    } 
+                    
+                    let desc = item.desc || (item.damage ? item.damage + ' Damage' : '');
+                    if (item.hpBonus) desc = `${item.desc}`;
+
+                    el.innerHTML = `<div class="flex items-center gap-3"><span class="text-2xl">${item.icon}</span><div class="text-left"><p class="font-bold text-sm text-white">${item.name}</p><p class="text-[10px] text-slate-400">${desc}</p></div></div>${actionBtn}`; 
+                    list.appendChild(el); 
+                }); 
+            },
+            buyItem(category, id) { 
+                const item = Items[category].find(i => i.id === id); if (!item || this.mrains < item.price) return; 
+                this.mrains -= item.price; 
+                if (!this.inventory[category]) this.inventory[category] = []; 
+                this.inventory[category].push(id); 
+                this.saveData(); this.updateMrainsDisplay(); this.filterStore(category); 
+            },
+            equipItem(category, id) { 
+                if (category === 'weapons') this.loadout.weapon = id; 
+                else if (category === 'powerups') this.loadout.powerup = id; 
+                else if (category === 'helmets') this.loadout.helmet = id;
+                else if (category === 'bodies') this.loadout.body = id;
+                else if (category === 'shields') this.loadout.shield = id;
+                this.saveData(); this.filterStore(category); this.updateLoadoutUI(); 
+            },
+            updateLoadoutUI() { 
+                const w = Items.weapons.find(i => i.id === this.loadout.weapon); 
+                this.elements.loadoutWeapon.innerText = w ? w.name : 'Fist'; 
+                
+                // Show Outfit Score/Remark snippet instead of just "Clothes"
+                const outfit = this.getOutfitRating();
+                let txt = "Basic";
+                if (outfit.bonus > 0) txt = `Set Bonus (+${outfit.bonus} HP)`;
+                else if (outfit.remark.includes("Sim")) txt = "Sim Vibes";
+                else if (outfit.remark.includes("NPC")) txt = "NPC Style";
+                else txt = "Mismatched";
+                this.elements.loadoutOutfit.innerText = txt;
+            },
+            updateOptionsUI() { const activeClass = "border-emerald-500 bg-emerald-900/30 text-white"; const inactiveClass = "border-slate-600 bg-slate-800 text-slate-400"; this.elements.btnModeArrows.className = `p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${this.inputMode === 'arrows' ? activeClass : inactiveClass}`; this.elements.btnModeLetters.className = `p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${this.inputMode === 'letters' ? activeClass : inactiveClass}`; this.elements.btnModeTrackpad.className = `p-2 rounded-lg border-2 transition-all flex flex-col items-center gap-1 ${this.inputMode === 'trackpad' ? activeClass : inactiveClass}`; },
+
+            // --- Game Logic ---
+            start() {
+                this.currentHP = this.currentMonster.hp; this.maxHP = this.currentMonster.hp;
+                
+                // Calculate Total Player HP
+                const h = Items.helmets.find(i => i.id === this.loadout.helmet);
+                const b = Items.bodies.find(i => i.id === this.loadout.body);
+                const s = Items.shields.find(i => i.id === this.loadout.shield);
+                const outfit = this.getOutfitRating();
+                
+                const armorBonus = (h ? h.hpBonus : 0) + (b ? b.hpBonus : 0) + (s ? s.hpBonus : 0) + outfit.bonus;
+                
+                this.maxPlayerHealth = GameConfig.basePlayerHP + armorBonus; this.playerHealth = this.maxPlayerHealth;
+                this.elements.monsterDisplay.innerText = this.currentMonster.emoji;
+                this.isPlaying = true; this.isArrowFrozen = false; this.powerupUsed = false; this.streakCharge = 0; this.startTime = Date.now(); this.lastPressTime = Date.now();
+                this.trackpadTotalFrames = 0; this.trackpadHitFrames = 0;
+                this.battleCharacters = 0; // Reset character count
+                
+                const w = Items.weapons.find(i => i.id === this.loadout.weapon);
+                this.elements.weaponDisplay.innerText = w ? w.icon : '👊';
+
+                // Reset UI
+                this.elements.dpadControls.classList.add('hidden');
+                this.elements.dpadControls.classList.remove('grid');
+                this.elements.trackpadHint.classList.add('hidden');
+                this.elements.wordHint.classList.add('hidden');
+
+                if (this.inputMode === 'trackpad') {
+                    this.elements.arrowDisplay.style.display = 'none'; this.elements.compassDisplay.classList.remove('hidden');
+                    // Ensure Container is Circle
+                    this.elements.inputContainer.className = "relative z-20 bg-slate-700/50 p-4 rounded-full border border-slate-600 backdrop-blur-sm w-40 h-40 flex items-center justify-center shadow-xl transition-all duration-200 overflow-hidden";
+                    
+                    this.elements.timerSvg.classList.add('hidden');
+                    this.elements.wordTimerBar.classList.add('hidden');
+                    this.elements.timerDisplay.innerText = "TRACK THE ARROW!";
+                    if (this.loadout.powerup === 'stopper') { this.elements.streakBarContainer.classList.remove('hidden'); this.elements.streakBarFill.style.width = '0%'; this.updateStreakUI(); } else { this.elements.streakBarContainer.classList.add('hidden'); this.elements.powerupStatus.style.opacity = '0'; }
+                    this.trackpadTargetAngle = 0; this.lastTrackingTime = Date.now(); this.trackpadDamageAccumulator = 0; this.trackpadDirection = 1; this.lastDirectionCheckTime = Date.now();
+                    const threshold = w.hitWindow || 25; const pixelSize = Math.max(12, 12 * (threshold / 25));
+                    this.elements.compassTrackerDot.style.width = `${pixelSize}px`; this.elements.compassTrackerDot.style.height = `${pixelSize}px`;
+                    this.elements.trackpadHint.classList.remove('hidden');
+                    this.trackpadLoop();
+                } else if (this.inputMode === 'letters') {
+                    // NEW: Word Mode Setup (Rounded Rectangle)
+                    this.elements.arrowDisplay.style.display = 'block'; this.elements.compassDisplay.classList.add('hidden');
+                    
+                    // Change Container Shape to Rounded Rectangle (Pill/2XL) and wider
+                    this.elements.inputContainer.className = "relative z-20 bg-slate-700/50 px-8 py-4 rounded-2xl border border-slate-600 backdrop-blur-sm w-auto min-w-[280px] h-24 flex items-center justify-center shadow-xl transition-all duration-200 overflow-hidden";
+                    
+                    this.elements.timerSvg.classList.add('hidden'); // Hide Circle Timer
+                    this.elements.wordTimerBar.classList.remove('hidden'); // Show Bar Timer
+                    
+                    this.elements.timerDisplay.innerText = "TYPE FAST!";
+                    if (this.loadout.powerup === 'stopper') { this.elements.streakBarContainer.classList.remove('hidden'); this.elements.streakBarFill.style.width = '0%'; this.updateStreakUI(); } else { this.elements.streakBarContainer.classList.add('hidden'); this.elements.powerupStatus.style.opacity = '0'; }
+                    this.elements.wordHint.classList.remove('hidden');
+                    this.nextWord();
+                } else {
+                    this.elements.arrowDisplay.style.display = 'block'; this.elements.compassDisplay.classList.add('hidden');
+                    // Ensure Container is Circle for Arrows
+                    this.elements.inputContainer.className = "relative z-20 bg-slate-700/50 p-4 rounded-full border border-slate-600 backdrop-blur-sm w-40 h-40 flex items-center justify-center shadow-xl transition-all duration-200 overflow-hidden";
+                    
+                    this.elements.timerSvg.classList.add('hidden');
+                    this.elements.wordTimerBar.classList.add('hidden');
+                    const seconds = (this.currentMonster.rarity.timeout / 1000).toFixed(1);
+                    this.elements.timerDisplay.innerText = `ACT FAST! ${seconds}s`;
+                    if (this.loadout.powerup === 'stopper') { this.elements.streakBarContainer.classList.remove('hidden'); this.elements.streakBarFill.style.width = '0%'; this.updateStreakUI(); } else { this.elements.streakBarContainer.classList.add('hidden'); this.elements.powerupStatus.style.opacity = '0'; }
+                    this.elements.dpadControls.classList.remove('hidden');
+                    this.elements.dpadControls.classList.add('grid');
+                    this.nextArrow();
+                }
+                this.elements.monsterDisplay.classList.remove('monster-death'); this.elements.monsterDisplay.style.opacity = '1'; this.elements.monsterDisplay.style.filter = 'grayscale(0%)';
+                this.elements.inputContainer.classList.remove('powerup-active');
+                this.clearCracks(); this.updateHealthUI(); this.updatePlayerLifeUI(); this.switchScreen('play');
+            },
+
+            // --- Word Logic ---
+            nextWord() {
+                if (this.currentHP <= 0) { this.winGame(); return; }
+                const rarity = this.currentMonster.rarity;
+                let pool = WordDictionary.easy;
+                if (rarity.id === 'medium') pool = WordDictionary.medium;
+                else if (rarity.id === 'hard') pool = WordDictionary.hard;
+                else if (rarity.id === 'muy_duro') pool = WordDictionary.expert;
+                else if (rarity.id === 'impossible' || rarity.id === 'intractable') pool = WordDictionary.god;
+                
+                this.currentWord = pool[Math.floor(Math.random() * pool.length)];
+                this.currentWordIndex = 0;
+                this.wordTimeLimit = rarity.wordTime;
+                
+                this.renderWordUI();
+                this.startWordTimer();
+            },
+            renderWordUI() {
+                let html = '';
+                for(let i=0; i<this.currentWord.length; i++) {
+                    if (i < this.currentWordIndex) html += `<span class="word-char typed text-2xl font-black font-mono">${this.currentWord[i]}</span>`;
+                    else if (i === this.currentWordIndex) html += `<span class="word-char current text-2xl font-black font-mono">${this.currentWord[i]}</span>`;
+                    else html += `<span class="word-char pending text-2xl font-black font-mono">${this.currentWord[i]}</span>`;
+                }
+                // Removed wrap limit, allow full width
+                this.elements.arrowDisplay.innerHTML = `<div class="flex flex-row justify-center gap-0.5 leading-none whitespace-nowrap">${html}</div>`;
+            },
+            startWordTimer() {
+                if (this.wordAnimFrame) cancelAnimationFrame(this.wordAnimFrame);
+                this.wordStartTime = Date.now();
+                const loop = () => {
+                    if (!this.isPlaying || this.inputMode !== 'letters') return;
+                    if (this.isArrowFrozen) {
+                         this.wordStartTime = Date.now() - (this.timeElapsed || 0);
+                         this.wordAnimFrame = requestAnimationFrame(loop);
+                         return;
+                    }
+
+                    const now = Date.now();
+                    this.timeElapsed = now - this.wordStartTime;
+                    const pct = Math.max(0, 1 - (this.timeElapsed / this.wordTimeLimit));
+                    
+                    // Update Bar Width
+                    this.elements.wordTimerBar.style.width = `${pct * 100}%`;
+
+                    // Color transition
+                    if (pct < 0.25) this.elements.wordTimerBar.className = 'absolute bottom-0 left-0 h-2 transition-all duration-75 ease-linear bg-red-500';
+                    else if (pct < 0.5) this.elements.wordTimerBar.className = 'absolute bottom-0 left-0 h-2 transition-all duration-75 ease-linear bg-yellow-500';
+                    else this.elements.wordTimerBar.className = 'absolute bottom-0 left-0 h-2 transition-all duration-75 ease-linear bg-cyan-400';
+
+                    if (this.timeElapsed >= this.wordTimeLimit) {
+                         this.handleWordTimeout();
+                    } else {
+                        this.wordAnimFrame = requestAnimationFrame(loop);
+                    }
+                };
+                this.wordAnimFrame = requestAnimationFrame(loop);
+            },
+            handleWordTimeout() {
+                this.monsterHeal(); 
+                this.takePlayerDamage(); 
+                this.damageStreak();
+                this.nextWord();
+            },
+
+            // --- Trackpad Logic ---
+            trackpadLoop() {
+                if (!this.isPlaying || this.inputMode !== 'trackpad') { cancelAnimationFrame(this.animationFrameId); return; }
+                this.trackpadTotalFrames++;
+                const now = Date.now();
+                if (!this.isArrowFrozen) {
+                    if (now - this.lastDirectionCheckTime > 1000) { this.lastDirectionCheckTime = now; if (Math.random() < 0.1) this.trackpadDirection *= -1; }
+                    const speed = this.currentMonster.rarity.rotateSpeed * this.trackpadDirection;
+                    this.trackpadTargetAngle += speed; this.elements.compassTarget.style.transform = `rotate(${this.trackpadTargetAngle}deg)`;
+                }
+                const normTarget = (this.trackpadTargetAngle % 360 + 360) % 360; const normPlayer = (this.trackpadPlayerAngle % 360 + 360) % 360;
+                let diff = Math.abs(normTarget - normPlayer); if (diff > 180) diff = 360 - diff; 
+                const w = Items.weapons.find(i => i.id === this.loadout.weapon); const threshold = w.hitWindow || 25; 
+                if (diff < threshold) {
+                    this.trackpadHitFrames++;
+                    this.lastTrackingTime = now; this.trackpadDamageAccumulator += 1;
+                    this.elements.inputContainer.classList.add('tracking-active'); this.elements.inputContainer.classList.remove('tracking-inactive');
+                    if (this.trackpadDamageAccumulator > 30) {
+                        this.trackpadDamageAccumulator = 0; 
+                        
+                        // FIX: Calculate damage for trackpad using Power formula (Base 4.5 char word)
+                        const w = Items.weapons.find(i => i.id === this.loadout.weapon);
+                        const power = w ? w.power : 1.0;
+                        const damage = Math.ceil(Math.pow(4.5, power));
+
+                        this.currentHP -= damage;
+                        this.showFloatingText(`-${damage}`, "text-white"); this.triggerHitAnim();
+                        if (this.loadout.powerup === 'stopper' && !this.powerupUsed) { this.streakCharge = Math.min(10, this.streakCharge + 1); this.updateStreakUI(); }
+                        if (this.currentHP <= 0) this.winGame();
+                    }
+                } else {
+                    this.elements.inputContainer.classList.remove('tracking-active'); this.elements.inputContainer.classList.add('tracking-inactive');
+                    if (now - this.lastTrackingTime > 500) { this.lastTrackingTime = now; this.monsterHeal(); this.takePlayerDamage(); this.damageStreak(); }
+                }
+                this.updateHealthUI(); this.animationFrameId = requestAnimationFrame(() => this.trackpadLoop());
+            },
+
+            // --- Powerup & Common Logic --- 
+            activatePowerUp() {
+                this.isArrowFrozen = true; this.powerupUsed = true; this.updateStreakUI();
+                this.elements.powerupStatus.innerHTML = `<span class="text-yellow-400 text-xs font-bold uppercase tracking-wide animate-pulse">ACTIVE!</span>`;
+                this.elements.inputContainer.classList.add('powerup-active');
+                if (this.inputMode !== 'trackpad') this.elements.arrowDisplay.classList.add('scale-125');
+                this.elements.streakBarFill.style.transition = 'none'; this.elements.streakBarFill.style.width = '100%';
+                void this.elements.streakBarFill.offsetWidth;
+                this.elements.streakBarFill.style.transition = 'width 2s linear'; this.elements.streakBarFill.style.width = '0%';
+                setTimeout(() => {
+                    this.isArrowFrozen = false; this.elements.inputContainer.classList.remove('powerup-active');
+                    if (this.inputMode !== 'trackpad') this.elements.arrowDisplay.classList.remove('scale-125');
+                    this.elements.powerupStatus.innerHTML = `<span class="text-slate-500 text-xs font-bold uppercase tracking-wide">Depleted</span>`;
+                    this.elements.streakBarFill.style.transition = 'width 0.1s ease-out';
+                    if (this.isPlaying && this.inputMode !== 'trackpad') {
+                        if (this.inputMode === 'letters') {
+                            // Reset timer for words
+                            this.wordStartTime = Date.now() - (this.timeElapsed || 0); // Resume
+                        } else {
+                            this.nextArrow();
+                        }
+                    }
+                }, 2000);
+            },
+            startReactionTimer() {
+                if (this.reactionTimer) clearTimeout(this.reactionTimer); if (this.isArrowFrozen) return; 
+                const timeout = this.currentMonster ? this.currentMonster.rarity.timeout : 500;
+                this.reactionTimer = setTimeout(() => { if (this.isPlaying && !this.isArrowFrozen) this.handleTimeout(); }, timeout);
+            },
+            nextArrow() {
+                if (this.currentHP <= 0) { this.winGame(); return; }
+                if (this.isArrowFrozen) return; 
+                const modeConfig = InputModes[this.inputMode]; const currentKeys = modeConfig.keys;
+                this.currentArrow = currentKeys[Math.floor(Math.random() * currentKeys.length)];
+                if (modeConfig.type === 'static') this.elements.arrowDisplay.innerHTML = modeConfig.assets[this.currentArrow];
+                else { const colors = ['text-cyan-400', 'text-emerald-400', 'text-violet-400', 'text-rose-400', 'text-yellow-400', 'text-orange-400']; const randomColor = colors[Math.floor(Math.random() * colors.length)]; this.elements.arrowDisplay.innerHTML = `<div class="text-6xl font-black font-mono ${randomColor}">${this.currentArrow.toUpperCase()}</div>`; }
+                this.lastPressTime = Date.now(); this.startReactionTimer(); 
+            },
+            handleInput(key) {
+                const now = Date.now();
+                if (this.inputMode === 'letters') {
+                    // NEW: Word Input Handling
+                    if (key === this.currentWord[this.currentWordIndex].toLowerCase()) {
+                        this.currentWordIndex++;
+                        this.battleCharacters++; // Increment character count
+                        this.renderWordUI();
+                        
+                        // Word Completed!
+                        if (this.currentWordIndex >= this.currentWord.length) {
+                             const w = Items.weapons.find(i => i.id === this.loadout.weapon);
+                             const power = w ? w.power : 1.0;
+                             const damage = Math.round(Math.pow(this.currentWord.length, power));
+                             
+                             this.currentHP -= damage; 
+                             this.showFloatingText(`-${damage}`, "text-white"); 
+                             this.triggerHitAnim();
+                             
+                             // Streak Logic
+                             if (this.loadout.powerup === 'stopper' && !this.powerupUsed) {
+                                this.streakCharge = Math.min(10, this.streakCharge + 2); // Faster charge on words
+                                this.updateStreakUI();
+                            }
+                            this.nextWord();
+                        }
+                    } else {
+                        // Typos
+                         this.elements.container.classList.remove('shake'); void this.elements.container.offsetWidth; this.elements.container.classList.add('shake');
+                         this.damageStreak();
+                    }
+                    this.updateHealthUI();
+                    return;
+                }
+
+                // OLD: Arrow Logic
+                if (key === this.currentArrow) {
+                    // FIX: Calculate damage for arrows using Power formula (Base 4.5 char word)
+                    const w = Items.weapons.find(i => i.id === this.loadout.weapon);
+                    const power = w ? w.power : 1.0;
+                    const damage = Math.ceil(Math.pow(4.5, power));
+
+                    this.currentHP -= damage; this.showFloatingText(`-${damage}`, "text-white"); this.triggerHitAnim();
+                    this.elements.container.classList.remove('border-slate-600'); this.elements.container.classList.add('border-red-500');
+                    setTimeout(() => { this.elements.container.classList.remove('border-red-500'); this.elements.container.classList.add('border-slate-600'); }, 100);
+                    if (this.loadout.powerup === 'stopper' && !this.powerupUsed) {
+                        if (now - this.lastPressTime <= 500) { this.streakCharge = Math.min(10, this.streakCharge + 1); if(this.streakCharge < 10) this.showFloatingText(`Combo ${this.streakCharge}`, "text-blue-400 text-sm"); } else { this.showFloatingText(`SLOW`, "text-slate-500 text-xs"); }
+                        this.updateStreakUI();
+                    }
+                    this.nextArrow();
+                } else { if (this.isArrowFrozen) return; this.monsterHeal(); this.takePlayerDamage(); this.damageStreak(); this.startReactionTimer(); }
+                this.updateHealthUI();
+            },
+            damageStreak() { if (this.loadout.powerup !== 'stopper' || this.powerupUsed) return; this.streakCharge = Math.max(0, this.streakCharge - 3); this.updateStreakUI(); },
+            updateStreakUI() {
+                if (this.loadout.powerup !== 'stopper') return; if (this.powerupUsed) return; 
+                const pct = (this.streakCharge / 10) * 100; this.elements.streakBarFill.style.width = `${pct}%`;
+                this.elements.streakBarFill.className = "h-full transition-all duration-100";
+                if (this.streakCharge >= 10) { this.elements.streakBarFill.classList.add("charge-max"); this.elements.powerupStatus.style.opacity = '1'; }
+                else if (this.streakCharge >= 7) { this.elements.streakBarFill.classList.add("charge-med"); this.elements.powerupStatus.style.opacity = '0'; }
+                else { this.elements.streakBarFill.classList.add("charge-low"); this.elements.powerupStatus.style.opacity = '0'; }
+            },
+            monsterHeal() { this.currentHP += GameConfig.healAmount; if (this.currentHP > this.maxHP) this.maxHP = this.currentHP; this.showFloatingText(`+${GameConfig.healAmount}`, "text-green-400"); this.triggerHealAnim(); },
+            takePlayerDamage() {
+                const damage = this.currentMonster.rarity.damage; this.playerHealth -= damage; this.updatePlayerLifeUI();
+                if (this.playerHealth <= 0) { document.getElementById(`crack-center`).classList.add('crack-visible'); this.loseGame(); } 
+                else { const crackId = Math.floor(Math.random() * 8) + 1; document.getElementById(`crack-edge-${crackId}`).classList.add('crack-visible'); }
+            },
+            updatePlayerLifeUI() { const percent = Math.max(0, (this.playerHealth / this.maxPlayerHealth) * 100); this.elements.playerLivesText.innerText = `${Math.ceil(percent)}%`; if (percent < 30) this.elements.playerLivesText.className = "text-red-500 animate-pulse font-bold"; else if (percent < 60) this.elements.playerLivesText.className = "text-yellow-400 font-bold"; else this.elements.playerLivesText.className = "text-cyan-400 font-bold"; },
+            updateHealthUI() { const percentage = Math.max(0, (this.currentHP / this.maxHP) * 100); this.elements.healthBarFill.style.width = `${percentage}%`; this.elements.healthText.innerText = `${this.currentHP} / ${this.maxHP} HP`; const healthRatio = Math.max(0, this.currentHP / this.maxHP); const opacity = 0.3 + (Math.min(1, healthRatio) * 0.7); const grayscale = 100 - (Math.min(1, healthRatio) * 100); this.elements.monsterDisplay.style.opacity = opacity; this.elements.monsterDisplay.style.filter = `grayscale(${grayscale}%)`; },
+            triggerHitAnim() { const el = this.elements.monsterDisplay; el.classList.remove('hit-anim'); void el.offsetWidth; el.classList.add('hit-anim'); },
+            triggerHealAnim() { const el = this.elements.container; el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); el.classList.remove('border-slate-600'); el.classList.add('border-green-500'); setTimeout(() => { el.classList.remove('border-green-500'); el.classList.add('border-slate-600'); }, 300); },
+            showFloatingText(text, colorClass) { const el = document.createElement('div'); el.innerText = text; el.className = `damage-text text-4xl ${colorClass}`; const randomX = (Math.random() - 0.5) * 100; el.style.left = `calc(50% + ${randomX}px)`; el.style.top = '40%'; this.elements.damageContainer.appendChild(el); setTimeout(() => el.remove(), 800); },
+            clearCracks() { document.querySelectorAll('.crack-path').forEach(el => el.classList.remove('crack-visible')); },
+            
+            // Common Win/Lose
+            winGame() {
+                this.isPlaying = false; this.isArrowFrozen = false; clearTimeout(this.reactionTimer); if(this.wordAnimFrame) cancelAnimationFrame(this.wordAnimFrame); cancelAnimationFrame(this.animationFrameId); this.endTime = Date.now();
+                const totalTimeMs = this.endTime - this.startTime; const totalTimeSec = (totalTimeMs / 1000).toFixed(3); const reward = this.currentMonster.reward;
+                this.mrains += reward; 
+                this.stats.kills += 1; 
+                this.stats.lifetimeMrains += reward; 
+                
+                // Rank Up Check & Bonus Logic
+                const currentRankIdx = this.getRankIndex(this.stats.kills - 1); // Previous rank
+                const newRankIdx = this.getRankIndex(this.stats.kills); // New rank
+                
+                let bonusMsg = "";
+                
+                if (newRankIdx > currentRankIdx) {
+                    const newRank = HunterRanks[newRankIdx];
+                    if (newRank.name === "Emoji God") {
+                        this.mrains = 1000000;
+                        bonusMsg = "MAX BRAINS UNLOCKED!";
+                    } else {
+                        const bonus = newRank.kills * 5;
+                        this.mrains += bonus;
+                        bonusMsg = `RANK UP BONUS: +${bonus} 🧠`;
+                    }
+                }
+
+                // Update specific Stats and Best Kills
+                const rarityScore = this.currentMonster.rarity.rewardMult; // Use reward mult as difficulty score
+                
+                if (this.inputMode === 'arrows') { 
+                    const ms = Math.round(totalTimeMs / 20); 
+                    if(!this.stats.twiddle || ms < this.stats.twiddle) this.stats.twiddle = ms; 
+                    
+                    const best = this.stats.bestKills.arrows;
+                    // Logic: Harder enemy always wins OR Same difficulty but faster time
+                    if (!best || rarityScore > best.rarity || (rarityScore === best.rarity && ms < best.stat)) {
+                        this.stats.bestKills.arrows = { emoji: this.currentMonster.emoji, name: this.currentMonster.name, rarity: rarityScore, stat: ms };
+                    }
+                }
+                
+                if (this.inputMode === 'letters') { 
+                    // Calculate WPM: (Chars / 5) / (Seconds / 60)
+                    const minutes = Math.max(0.001, totalTimeMs / 60000); // Prevent divide by zero
+                    const wpm = Math.round((this.battleCharacters / 5) / minutes);
+                    
+                    if(!this.stats.alpha || wpm > this.stats.alpha) this.stats.alpha = wpm; 
+                    
+                    const best = this.stats.bestKills.letters;
+                    // Logic: Harder enemy always wins OR Same difficulty but faster WPM
+                    if (!best || rarityScore > best.rarity || (rarityScore === best.rarity && wpm > best.stat)) {
+                        this.stats.bestKills.letters = { emoji: this.currentMonster.emoji, name: this.currentMonster.name, rarity: rarityScore, stat: wpm };
+                    }
+                }
+                
+                if (this.inputMode === 'trackpad') { 
+                    const sync = Math.round((this.trackpadHitFrames / this.trackpadTotalFrames) * 100) || 0; 
+                    if(!this.stats.sync || sync > this.stats.sync) this.stats.sync = sync; 
+                    
+                    const best = this.stats.bestKills.trackpad;
+                    // Logic: Harder enemy always wins OR Same difficulty but higher sync
+                    if (!best || rarityScore > best.rarity || (rarityScore === best.rarity && sync > best.stat)) {
+                        this.stats.bestKills.trackpad = { emoji: this.currentMonster.emoji, name: this.currentMonster.name, rarity: rarityScore, stat: sync };
+                    }
+                }
+
+                this.saveData(); this.updateMrainsDisplay(); this.updateProfileUI(); 
+                this.elements.monsterDisplay.classList.add('monster-death'); this.clearCracks(); 
+                setTimeout(() => {
+                    this.triggerConfetti();
+                    this.elements.resultTitle.innerText = "MONSTER SLAIN!"; this.elements.resultTitle.className = "text-3xl font-black text-emerald-500 uppercase italic";
+                    this.elements.resultIcon.innerText = "🏆"; this.elements.resultStatsGrid.classList.remove('hidden');
+                    this.elements.resultTime.innerText = `${totalTimeSec}s`; 
+                    this.elements.resultReward.innerText = `+${reward} 🧠`;
+                    this.elements.btnRevive.classList.add('hidden'); // Hide revive button on win
+                    
+                    if (bonusMsg) {
+                        this.showFloatingText(bonusMsg, "text-yellow-400 font-bold text-xl");
+                    }
+
+                    this.rerollMonster(); this.switchScreen('result');
+                }, 800);
+            },
+            loseGame() { this.isPlaying = false; this.isArrowFrozen = false; clearTimeout(this.reactionTimer); if(this.wordAnimFrame) cancelAnimationFrame(this.wordAnimFrame); cancelAnimationFrame(this.animationFrameId); this.elements.resultTitle.innerText = "YOU DIED"; this.elements.resultTitle.className = "text-4xl font-black text-red-600 uppercase tracking-widest"; this.elements.resultIcon.innerText = "☠️"; this.elements.resultStatsGrid.classList.add('hidden'); this.clearCracks(); this.switchScreen('result'); this.elements.postGameControls.classList.remove('hidden'); this.elements.btnRevive.classList.remove('hidden'); },
+            handleTimeout() { if (!this.isPlaying) return; this.monsterHeal(); this.takePlayerDamage(); this.damageStreak(); if (this.isPlaying) this.startReactionTimer(); },
+            rerollMonster() {
+                const roll = Math.random(); let rarity = Rarity.EASY;
+                if (roll < 0.01) rarity = Rarity.INTRACTABLE; else if (roll < 0.05) rarity = Rarity.IMPOSSIBLE; else if (roll < 0.13) rarity = Rarity.MUY_DURO; else if (roll < 0.25) rarity = Rarity.HARD; else if (roll < 0.50) rarity = Rarity.MEDIUM; else rarity = Rarity.EASY;
+                const base = BaseMonsters[Math.floor(Math.random() * BaseMonsters.length)];
+                this.currentMonster = { emoji: base.emoji, name: `${rarity.label} ${base.name}`, hp: Math.round(20 * rarity.hpMult), reward: Math.round(10 * rarity.rewardMult), rarity: rarity };
+                this.updatePreviewUI();
+            },
+            updatePreviewUI() { const m = this.currentMonster; this.elements.previewEmoji.innerText = m.emoji; this.elements.previewName.innerText = m.name; this.elements.previewName.className = `font-bold ${m.rarity.color}`; this.elements.previewHP.innerText = `${m.hp} HP • Reward: ${m.reward} 🧠`; this.elements.previewRarity.innerText = m.rarity.label; this.elements.previewRarity.className = `text-[10px] uppercase font-bold ${m.rarity.color}`; },
+            triggerConfetti() { const container = this.elements.confettiContainer; const colors = ['#ef4444', '#f97316', '#eab308', '#ffffff']; for (let i = 0; i < 50; i++) { const el = document.createElement('div'); el.classList.add('confetti'); el.style.backgroundColor = colors[Math.floor(Math.random() * colors.length)]; el.style.left = Math.random() * 100 + 'vw'; el.style.animationDuration = (Math.random() * 2 + 1.5) + 's'; el.style.opacity = Math.random(); container.appendChild(el); setTimeout(() => el.remove(), 4000); } },
+            triggerCountdown() { this.switchScreen('countdown'); let count = 3; const updateNum = (num) => { this.elements.countdownNum.innerText = num; this.elements.countdownNum.classList.remove('count-anim'); void this.elements.countdownNum.offsetWidth; this.elements.countdownNum.classList.add('count-anim'); }; updateNum(count); const interval = setInterval(() => { count--; if (count > 0) updateNum(count); else { clearInterval(interval); this.start(); } }, 1000); },
+            nextLevel() { this.triggerCountdown(); },
+            returnToStart() { this.updateProfileUI(); this.updatePreviewUI(); this.switchScreen('start'); },
+        };
+
+        window.game = game;
+        game.init();
+    </script>
+</body>
+</html>
